@@ -4,8 +4,13 @@ import {
   Credential, 
   InsertCredential, 
   Challenge, 
-  InsertChallenge 
+  InsertChallenge,
+  users,
+  credentials,
+  challenges
 } from "@shared/schema";
+import { eq, and, lt } from "drizzle-orm";
+import { db } from "./db";
 
 export interface IStorage {
   // User methods
@@ -32,151 +37,112 @@ export interface IStorage {
   deleteExpiredChallenges(): Promise<number>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private credentials: Map<number, Credential>;
-  private challenges: Map<number, Challenge>;
-  private userIdCounter: number;
-  private credentialIdCounter: number;
-  private challengeIdCounter: number;
-
-  constructor() {
-    this.users = new Map();
-    this.credentials = new Map();
-    this.challenges = new Map();
-    this.userIdCounter = 1;
-    this.credentialIdCounter = 1;
-    this.challengeIdCounter = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   // User methods
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email === email,
-    );
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const user: User = { ...insertUser, id, registered: false };
-    this.users.set(id, user);
-    return user;
+    const result = await db.insert(users).values({
+      ...insertUser,
+      registered: false
+    }).returning();
+    
+    return result[0];
   }
 
   async updateUser(id: number, updates: Partial<User>): Promise<User | undefined> {
-    const user = await this.getUser(id);
-    if (!user) return undefined;
+    const result = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
     
-    const updatedUser = { ...user, ...updates };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    return result.length > 0 ? result[0] : undefined;
   }
 
   // Credential methods
   async getCredential(id: number): Promise<Credential | undefined> {
-    return this.credentials.get(id);
+    const result = await db.select().from(credentials).where(eq(credentials.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getCredentialByCredentialId(credentialId: string): Promise<Credential | undefined> {
-    return Array.from(this.credentials.values()).find(
-      (credential) => credential.credentialId === credentialId,
-    );
+    const result = await db.select().from(credentials).where(eq(credentials.credentialId, credentialId));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getCredentialsByUserId(userId: number): Promise<Credential[]> {
-    return Array.from(this.credentials.values()).filter(
-      (credential) => credential.userId === userId,
-    );
+    return await db.select().from(credentials).where(eq(credentials.userId, userId));
   }
 
   async createCredential(insertCredential: InsertCredential): Promise<Credential> {
-    const id = this.credentialIdCounter++;
-    const now = new Date();
-    const credential: Credential = { 
-      ...insertCredential, 
-      id,
-      createdAt: now,
-      transports: insertCredential.transports || null
-    };
-    this.credentials.set(id, credential);
-    return credential;
+    const result = await db.insert(credentials).values(insertCredential).returning();
+    return result[0];
   }
 
   async updateCredential(id: number, updates: Partial<Credential>): Promise<Credential | undefined> {
-    const credential = await this.getCredential(id);
-    if (!credential) return undefined;
+    const result = await db.update(credentials)
+      .set(updates)
+      .where(eq(credentials.id, id))
+      .returning();
     
-    const updatedCredential = { ...credential, ...updates };
-    this.credentials.set(id, updatedCredential);
-    return updatedCredential;
+    return result.length > 0 ? result[0] : undefined;
   }
 
   // Challenge methods
   async getChallenge(id: number): Promise<Challenge | undefined> {
-    return this.challenges.get(id);
+    const result = await db.select().from(challenges).where(eq(challenges.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getChallengeByChallenge(challenge: string): Promise<Challenge | undefined> {
-    return Array.from(this.challenges.values()).find(
-      (ch) => ch.challenge === challenge,
-    );
+    const result = await db.select().from(challenges).where(eq(challenges.challenge, challenge));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getChallengesByUserId(userId: number): Promise<Challenge[]> {
-    return Array.from(this.challenges.values()).filter(
-      (challenge) => challenge.userId === userId,
-    );
+    return await db.select().from(challenges).where(eq(challenges.userId, userId));
   }
 
   async createChallenge(insertChallenge: InsertChallenge): Promise<Challenge> {
-    const id = this.challengeIdCounter++;
-    const now = new Date();
-    const challenge: Challenge = { 
-      ...insertChallenge, 
-      id,
-      createdAt: now,
-      userId: insertChallenge.userId || null,
-      qrCode: insertChallenge.qrCode || null
-    };
-    this.challenges.set(id, challenge);
-    return challenge;
+    const result = await db.insert(challenges).values(insertChallenge).returning();
+    return result[0];
   }
 
   async updateChallenge(id: number, updates: Partial<Challenge>): Promise<Challenge | undefined> {
-    const challenge = await this.getChallenge(id);
-    if (!challenge) return undefined;
+    const result = await db.update(challenges)
+      .set(updates)
+      .where(eq(challenges.id, id))
+      .returning();
     
-    const updatedChallenge = { ...challenge, ...updates };
-    this.challenges.set(id, updatedChallenge);
-    return updatedChallenge;
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async deleteChallenge(id: number): Promise<boolean> {
-    return this.challenges.delete(id);
+    const result = await db.delete(challenges).where(eq(challenges.id, id)).returning();
+    return result.length > 0;
   }
 
   async deleteExpiredChallenges(): Promise<number> {
     const now = new Date();
-    const expiredChallenges = Array.from(this.challenges.values()).filter(
-      (challenge) => new Date(challenge.expiresAt) < now,
-    );
+    const result = await db.delete(challenges)
+      .where(lt(challenges.expiresAt, now))
+      .returning();
     
-    expiredChallenges.forEach((challenge) => {
-      this.challenges.delete(challenge.id);
-    });
-    
-    return expiredChallenges.length;
+    return result.length;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

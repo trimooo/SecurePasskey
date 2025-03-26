@@ -1,7 +1,9 @@
-import { pgTable, text, serial, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, jsonb, timestamp, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
 
+// Define tables first
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -11,7 +13,7 @@ export const users = pgTable("users", {
 
 export const credentials = pgTable("credentials", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   credentialId: text("credential_id").notNull().unique(),
   publicKey: text("public_key").notNull(),
   counter: integer("counter").notNull(),
@@ -21,13 +23,33 @@ export const credentials = pgTable("credentials", {
 
 export const challenges = pgTable("challenges", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id"),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   challenge: text("challenge").notNull(),
   type: text("type").notNull(), // 'registration' or 'authentication'
   qrCode: text("qr_code"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+
+// Define relations after all tables are declared
+export const usersRelations = relations(users, ({ many }) => ({
+  credentials: many(credentials),
+  challenges: many(challenges),
+}));
+
+export const credentialsRelations = relations(credentials, ({ one }) => ({
+  user: one(users, {
+    fields: [credentials.userId],
+    references: [users.id],
+  }),
+}));
+
+export const challengesRelations = relations(challenges, ({ one }) => ({
+  user: one(users, {
+    fields: [challenges.userId],
+    references: [users.id],
+  }),
+}));
 
 // Insert schemas
 
