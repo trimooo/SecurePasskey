@@ -1,0 +1,440 @@
+import type { Express, Request, Response } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { 
+  generateChallenge, 
+  bufferToBase64URL, 
+  base64URLToBuffer, 
+  generateQRCodeUrl,
+  createRegistrationOptions,
+  createAuthenticationOptions,
+  verifyOrigin,
+  verifyRpIdHash,
+  parseAuthenticatorData
+} from "./webAuthn";
+import crypto from 'crypto';
+import { z } from "zod";
+import { webAuthnRegistrationInputSchema, webAuthnLoginInputSchema, insertUserSchema } from "@shared/schema";
+
+// Configuration for WebAuthn
+const WEBAUTHN_CONFIG = {
+  rpName: 'PassKey Auth',
+  rpId: process.env.RP_ID || process.env.HOST || 'localhost',
+  origin: process.env.ORIGIN || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}` || 'http://localhost:5000',
+  timeout: 60000,
+  challengeTimeout: 300000, // 5 minutes in milliseconds
+};
+
+// Helper to get the host from request
+function getHost(req: Request): string {
+  // Use X-Forwarded-Host if available (for proxied requests)
+  const host = req.get('X-Forwarded-Host') || req.get('Host') || 'localhost';
+  return host;
+}
+
+// Helper to get the origin from request
+function getOrigin(req: Request): string {
+  // Protocol might be HTTP or HTTPS depending on environment
+  const protocol = req.protocol === 'http' ? 'http' : 'https';
+  const host = getHost(req);
+  return `${protocol}://${host}`;
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Clean up expired challenges periodically
+  setInterval(async () => {
+    try {
+      const deleted = await storage.deleteExpiredChallenges();
+      if (deleted > 0) {
+        console.log(`Deleted ${deleted} expired challenges`);
+      }
+    } catch (error) {
+      console.error('Error cleaning up challenges:', error);
+    }
+  }, 60000); // Run every minute
+
+  // Check if user exists
+  app.post('/api/auth/check-user', async (req: Request, res: Response) => {
+    try {
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+      
+      const user = await storage.getUserByEmail(email);
+      return res.json({ exists: !!user && user.registered });
+    } catch (error) {
+      console.error('Error checking user:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Start registration process
+  app.post('/api/auth/register/start', async (req: Request, res: Response) => {
+    try {
+      const { email } = webAuthnRegistrationInputSchema.parse(req.body);
+      
+      // Check if user already exists and is registered
+      let user = await storage.getUserByEmail(email);
+      if (user && user.registered) {
+        return res.status(400).json({ message: 'User already registered' });
+      }
+      
+      // Create user if not exists
+      if (!user) {
+        const username = email.split('@')[0]; // Simple username from email
+        user = await storage.createUser({
+          email,
+          username,
+        });
+      }
+      
+      // Generate challenge
+      const challenge = generateChallenge();
+      const expiresAt = new Date(Date.now() + WEBAUTHN_CONFIG.challengeTimeout);
+      
+      await storage.createChallenge({
+        userId: user.id,
+        challenge,
+        type: 'registration',
+        expiresAt,
+      });
+      
+      // Create registration options
+      const userId = bufferToBase64URL(Buffer.from(user.id.toString()));
+      const registrationOptions = createRegistrationOptions(
+        userId,
+        user.username,
+        user.email,
+        challenge,
+        WEBAUTHN_CONFIG.rpName,
+        WEBAUTHN_CONFIG.rpId,
+        WEBAUTHN_CONFIG.timeout,
+      );
+      
+      return res.json(registrationOptions);
+    } catch (error) {
+      console.error('Error starting registration:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Complete registration process
+  app.post('/api/auth/register/complete', async (req: Request, res: Response) => {
+    try {
+      const { email, credential } = z.object({
+        email: z.string().email(),
+        credential: z.object({
+          id: z.string(),
+          rawId: z.string(),
+          type: z.string(),
+          response: z.object({
+            attestationObject: z.string(),
+            clientDataJSON: z.string(),
+          }),
+          authenticatorAttachment: z.string().optional(),
+          transports: z.array(z.string()).optional(),
+        }),
+      }).parse(req.body);
+      
+      // Get user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Get active challenges for user
+      const challenges = await storage.getChallengesByUserId(user.id);
+      const challenge = challenges.find(c => c.type === 'registration' && new Date(c.expiresAt) > new Date());
+      
+      if (!challenge) {
+        return res.status(400).json({ message: 'No active challenge found' });
+      }
+      
+      // Verify client data
+      const clientDataJSON = base64URLToBuffer(credential.response.clientDataJSON).toString();
+      const clientData = JSON.parse(clientDataJSON);
+      
+      // Verify challenge
+      if (clientData.challenge !== challenge.challenge) {
+        return res.status(400).json({ message: 'Challenge mismatch' });
+      }
+      
+      // Verify origin
+      const expectedOrigin = WEBAUTHN_CONFIG.origin;
+      if (clientData.origin !== expectedOrigin) {
+        return res.status(400).json({ message: 'Origin mismatch' });
+      }
+      
+      // Extract credential public key from attestation object
+      // Note: This is a simplified example, real implementation would need CBOR decoding
+      // For production, use a WebAuthn library like @simplewebauthn/server
+      const attestationObject = base64URLToBuffer(credential.response.attestationObject);
+      const publicKey = crypto.createHash('sha256').update(attestationObject).digest('base64');
+      
+      // Save credential
+      const credentialData = await storage.createCredential({
+        userId: user.id,
+        credentialId: credential.rawId,
+        publicKey,
+        counter: 0,
+        transports: credential.transports || [],
+      });
+      
+      // Update user as registered
+      const updatedUser = await storage.updateUser(user.id, { registered: true });
+      
+      // Delete used challenge
+      await storage.deleteChallenge(challenge.id);
+      
+      return res.json({ 
+        user: updatedUser,
+        message: 'Registration successful' 
+      });
+    } catch (error) {
+      console.error('Error completing registration:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Start login process
+  app.post('/api/auth/login/start', async (req: Request, res: Response) => {
+    try {
+      const { email } = webAuthnLoginInputSchema.parse(req.body);
+      
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      if (!user.registered) {
+        return res.status(400).json({ message: 'User not registered, please register first' });
+      }
+      
+      // Get user credentials
+      const credentials = await storage.getCredentialsByUserId(user.id);
+      if (credentials.length === 0) {
+        return res.status(400).json({ message: 'No credentials found for user' });
+      }
+      
+      // Generate challenge
+      const challenge = generateChallenge();
+      const expiresAt = new Date(Date.now() + WEBAUTHN_CONFIG.challengeTimeout);
+      
+      await storage.createChallenge({
+        userId: user.id,
+        challenge,
+        type: 'authentication',
+        expiresAt,
+      });
+      
+      // Create authentication options
+      const allowCredentials = credentials.map(credential => ({
+        id: credential.credentialId,
+        type: 'public-key' as const,
+      }));
+      
+      const authenticationOptions = createAuthenticationOptions(
+        challenge,
+        WEBAUTHN_CONFIG.rpId,
+        allowCredentials,
+        WEBAUTHN_CONFIG.timeout,
+      );
+      
+      return res.json(authenticationOptions);
+    } catch (error) {
+      console.error('Error starting login:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Complete login process
+  app.post('/api/auth/login/complete', async (req: Request, res: Response) => {
+    try {
+      const { email, credential } = z.object({
+        email: z.string().email(),
+        credential: z.object({
+          id: z.string(),
+          rawId: z.string(),
+          type: z.string(),
+          response: z.object({
+            authenticatorData: z.string(),
+            clientDataJSON: z.string(),
+            signature: z.string(),
+            userHandle: z.string().nullable(),
+          }),
+          clientExtensionResults: z.record(z.any()),
+        }),
+      }).parse(req.body);
+      
+      // Get user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Get credential
+      const userCredential = await storage.getCredentialByCredentialId(credential.rawId);
+      if (!userCredential) {
+        return res.status(400).json({ message: 'Credential not found' });
+      }
+      
+      // Verify user
+      if (userCredential.userId !== user.id) {
+        return res.status(400).json({ message: 'Credential does not belong to user' });
+      }
+      
+      // Get active challenges for user
+      const challenges = await storage.getChallengesByUserId(user.id);
+      const challenge = challenges.find(c => c.type === 'authentication' && new Date(c.expiresAt) > new Date());
+      
+      if (!challenge) {
+        return res.status(400).json({ message: 'No active challenge found' });
+      }
+      
+      // Verify client data
+      const clientDataJSON = base64URLToBuffer(credential.response.clientDataJSON).toString();
+      const clientData = JSON.parse(clientDataJSON);
+      
+      // Verify challenge
+      if (clientData.challenge !== challenge.challenge) {
+        return res.status(400).json({ message: 'Challenge mismatch' });
+      }
+      
+      // Verify origin
+      const expectedOrigin = WEBAUTHN_CONFIG.origin;
+      if (clientData.origin !== expectedOrigin) {
+        return res.status(400).json({ message: 'Origin mismatch' });
+      }
+      
+      // Verify authenticator data
+      const authData = base64URLToBuffer(credential.response.authenticatorData);
+      const parsedAuthData = parseAuthenticatorData(authData);
+      
+      // Verify RP ID hash
+      const rpIdVerified = verifyRpIdHash(authData, WEBAUTHN_CONFIG.rpId);
+      if (!rpIdVerified) {
+        return res.status(400).json({ message: 'RP ID hash verification failed' });
+      }
+      
+      // Verify user verified flag (bit 0 of flags)
+      const userVerifiedFlag = (parsedAuthData.flags & 0x04) !== 0;
+      if (!userVerifiedFlag) {
+        return res.status(400).json({ message: 'User was not verified by the authenticator' });
+      }
+      
+      // Verify counter
+      if (parsedAuthData.counter <= userCredential.counter) {
+        // This could indicate a cloned credential
+        console.warn(`Counter did not increase for credential ${userCredential.id}`);
+      }
+      
+      // Update credential counter
+      await storage.updateCredential(userCredential.id, {
+        counter: parsedAuthData.counter,
+      });
+      
+      // Delete used challenge
+      await storage.deleteChallenge(challenge.id);
+      
+      return res.json({ 
+        user,
+        message: 'Login successful' 
+      });
+    } catch (error) {
+      console.error('Error completing login:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Generate QR code for login
+  app.post('/api/auth/qrcode', async (req: Request, res: Response) => {
+    try {
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+      
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      if (!user.registered) {
+        return res.status(400).json({ message: 'User not registered, please register first' });
+      }
+      
+      // Generate challenge
+      const challenge = generateChallenge();
+      const expiresAt = new Date(Date.now() + WEBAUTHN_CONFIG.challengeTimeout);
+      
+      // Generate unique challenge ID for QR code
+      const qrCodeData = `${challenge}:${user.id}`;
+      
+      // Create challenge record
+      const challengeRecord = await storage.createChallenge({
+        userId: user.id,
+        challenge,
+        type: 'qrcode',
+        qrCode: qrCodeData,
+        expiresAt,
+      });
+      
+      return res.json({
+        id: challengeRecord.id.toString(),
+        qrCode: qrCodeData,
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Verify QR code challenge
+  app.post('/api/auth/qrcode/verify', async (req: Request, res: Response) => {
+    try {
+      const { challengeId } = z.object({ challengeId: z.string() }).parse(req.body);
+      
+      // Get challenge
+      const challengeIdNum = parseInt(challengeId, 10);
+      const challenge = await storage.getChallenge(challengeIdNum);
+      
+      if (!challenge) {
+        return res.status(404).json({ message: 'Challenge not found' });
+      }
+      
+      // Check if challenge is expired
+      if (new Date(challenge.expiresAt) < new Date()) {
+        await storage.deleteChallenge(challenge.id);
+        return res.status(400).json({ message: 'Challenge expired' });
+      }
+      
+      // Check if challenge type is qrcode
+      if (challenge.type !== 'qrcode') {
+        return res.status(400).json({ message: 'Invalid challenge type' });
+      }
+      
+      // Get user
+      if (!challenge.userId) {
+        return res.status(400).json({ message: 'No user associated with challenge' });
+      }
+      
+      const user = await storage.getUser(challenge.userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Delete used challenge
+      await storage.deleteChallenge(challenge.id);
+      
+      return res.json({
+        verified: true,
+        user,
+        message: 'QR code verification successful',
+      });
+    } catch (error) {
+      console.error('Error verifying QR code:', error);
+      return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
