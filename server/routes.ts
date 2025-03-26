@@ -53,6 +53,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }, 60000); // Run every minute
 
+  // Health check endpoint
+  app.get('/api/health', async (_req: Request, res: Response) => {
+    try {
+      // Check database connection
+      await storage.getUser(0);
+      return res.json({ 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0'
+      });
+    } catch (error) {
+      console.error('Health check failed:', error);
+      return res.status(500).json({ 
+        status: 'unhealthy', 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Check if user exists
   app.post('/api/auth/check-user', async (req: Request, res: Response) => {
     try {
