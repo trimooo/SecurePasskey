@@ -106,6 +106,7 @@ export class MemStorage implements IStorage {
       ...insertCredential, 
       id,
       createdAt: now,
+      transports: insertCredential.transports || null
     };
     this.credentials.set(id, credential);
     return credential;
@@ -144,6 +145,8 @@ export class MemStorage implements IStorage {
       ...insertChallenge, 
       id,
       createdAt: now,
+      userId: insertChallenge.userId || null,
+      qrCode: insertChallenge.qrCode || null
     };
     this.challenges.set(id, challenge);
     return challenge;
