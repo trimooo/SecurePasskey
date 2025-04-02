@@ -1,0 +1,45 @@
+Error handling response: TypeError: Cannot read properties of undefined (reading 'length')
+    at chrome-extension://gbdjcgalliefpinpmggefbloehmmknca/data/content/element-to-block.js:1:7833Understand this errorAI
+queryClient.ts:27 
+            
+            
+           POST https://c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/api/auth/login/complete 400 (Bad Request)
+apiRequest @ queryClient.ts:27
+completeLogin @ webAuthn.ts:236
+handleUsePasskey @ PasskeyLoginScreen.tsx:106
+await in handleUsePasskey
+callCallback2 @ chunk-WERSD76P.js?v=0e87b28b:3674
+invokeGuardedCallbackDev @ chunk-WERSD76P.js?v=0e87b28b:3699
+invokeGuardedCallback @ chunk-WERSD76P.js?v=0e87b28b:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-WERSD76P.js?v=0e87b28b:3736
+executeDispatch @ chunk-WERSD76P.js?v=0e87b28b:7014
+processDispatchQueueItemsInOrder @ chunk-WERSD76P.js?v=0e87b28b:7034
+processDispatchQueue @ chunk-WERSD76P.js?v=0e87b28b:7043
+dispatchEventsForPlugins @ chunk-WERSD76P.js?v=0e87b28b:7051
+(anonymous) @ chunk-WERSD76P.js?v=0e87b28b:7174
+batchedUpdates$1 @ chunk-WERSD76P.js?v=0e87b28b:18913
+batchedUpdates @ chunk-WERSD76P.js?v=0e87b28b:3579
+dispatchEventForPluginEventSystem @ chunk-WERSD76P.js?v=0e87b28b:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-WERSD76P.js?v=0e87b28b:5478
+dispatchEvent @ chunk-WERSD76P.js?v=0e87b28b:5472
+dispatchDiscreteEvent @ chunk-WERSD76P.js?v=0e87b28b:5449Understand this errorAI
+PasskeyLoginScreen.tsx:118 Error completing login: Error: Login failed with status 400
+    at completeLogin (webAuthn.ts:257:11)
+    at async handleUsePasskey (PasskeyLoginScreen.tsx:106:24)
+handleUsePasskey @ PasskeyLoginScreen.tsx:118
+await in handleUsePasskey
+callCallback2 @ chunk-WERSD76P.js?v=0e87b28b:3674
+invokeGuardedCallbackDev @ chunk-WERSD76P.js?v=0e87b28b:3699
+invokeGuardedCallback @ chunk-WERSD76P.js?v=0e87b28b:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-WERSD76P.js?v=0e87b28b:3736
+executeDispatch @ chunk-WERSD76P.js?v=0e87b28b:7014
+processDispatchQueueItemsInOrder @ chunk-WERSD76P.js?v=0e87b28b:7034
+processDispatchQueue @ chunk-WERSD76P.js?v=0e87b28b:7043
+dispatchEventsForPlugins @ chunk-WERSD76P.js?v=0e87b28b:7051
+(anonymous) @ chunk-WERSD76P.js?v=0e87b28b:7174
+batchedUpdates$1 @ chunk-WERSD76P.js?v=0e87b28b:18913
+batchedUpdates @ chunk-WERSD76P.js?v=0e87b28b:3579
+dispatchEventForPluginEventSystem @ chunk-WERSD76P.js?v=0e87b28b:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-WERSD76P.js?v=0e87b28b:5478
+dispatchEvent @ chunk-WERSD76P.js?v=0e87b28b:5472
+dispatchDiscreteEvent @ chunk-WERSD76P.js?v=0e87b28b:5449Understand this errorAI

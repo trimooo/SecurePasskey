@@ -20,18 +20,12 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
-  const { email, setUser } = useAuth();
+  const { email, setUser, setEmail } = useAuth();
   
   // Generate QR code challenge
   const generateQRCode = async () => {
-    if (!email) {
-      toast({
-        title: "Error",
-        description: "Email is required",
-        variant: "destructive",
-      });
-      return;
-    }
+    // We'll allow QR code generation even without an email
+    // This makes cross-device login more flexible
     
     try {
       setIsLoading(true);
@@ -42,7 +36,8 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
       
       let data;
       try {
-        data = await getQRCodeChallenge(email);
+        // We'll pass the email if available, but it's now optional
+        data = await getQRCodeChallenge(email || undefined);
       } catch (error) {
         console.error("Error fetching QR challenge:", error);
         toast({
@@ -50,6 +45,7 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
           description: "Could not generate QR code. Please try again later.",
           variant: "destructive",
         });
+        setIsLoading(false);
         return;
       }
       
@@ -146,6 +142,10 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
           // Update authentication state
           setUser(response.user);
           
+          // Also update the email context with the user's email
+          // This ensures the email is available for future login attempts
+          setEmail(response.user.email);
+          
           toast({
             title: "Success",
             description: "QR code authentication successful",
@@ -157,7 +157,19 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
         failedAttempts++;
         console.error(`Error verifying QR code (attempt ${failedAttempts}/${maxFailedAttempts}):`, error);
         
-        if (failedAttempts >= maxFailedAttempts) {
+        // Check if error is about anonymous QR code requiring authentication
+        const errorMessage = error instanceof Error ? error.message : "";
+        if (errorMessage.includes("requires authentication") || 
+            errorMessage.includes("requiresAuthentication")) {
+          // Handle anonymous QR code that requires a logged-in user to scan
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          
+          toast({
+            title: "Authentication Required",
+            description: "This QR code requires you to be logged in on the scanning device.",
+            variant: "warning",
+          });
+        } else if (failedAttempts >= maxFailedAttempts) {
           // If we've had too many failed attempts, stop polling
           if (pollingRef.current) clearInterval(pollingRef.current);
           

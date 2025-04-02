@@ -261,9 +261,11 @@ export async function completeLogin(email: string, credential: any) {
 }
 
 // Get QR code for login
-export async function getQRCodeChallenge(email: string) {
+export async function getQRCodeChallenge(email?: string) {
   try {
-    const response = await apiRequest('POST', '/api/auth/qrcode', { email });
+    // Email is now optional - server supports anonymous QR codes
+    const payload = email ? { email } : {};
+    const response = await apiRequest('POST', '/api/auth/qrcode', payload);
     
     if (!response.ok) {
       let errorMessage;

@@ -66,13 +66,15 @@ export const insertCredentialSchema = createInsertSchema(credentials).pick({
   transports: true,
 });
 
-export const insertChallengeSchema = createInsertSchema(challenges).pick({
-  userId: true,
-  challenge: true,
-  type: true,
-  qrCode: true,
-  expiresAt: true,
-});
+export const insertChallengeSchema = createInsertSchema(challenges)
+  .pick({
+    userId: true,
+    challenge: true,
+    type: true,
+    qrCode: true,
+    expiresAt: true,
+  });
+// Note: userId is already optional because it's not marked as notNull in the table definition
 
 // Types
 
