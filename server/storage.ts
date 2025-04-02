@@ -7,13 +7,18 @@ import {
   InsertChallenge,
   SavedPassword,
   InsertSavedPassword,
+  MfaRecoveryCode,
+  InsertMfaRecoveryCode,
   users,
   credentials,
   challenges,
-  savedPasswords
+  savedPasswords,
+  mfaRecoveryCodes
 } from "@shared/schema";
 import { eq, and, lt } from "drizzle-orm";
-import { db } from "./db";
+import { db, pool } from "./db";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 
 export interface IStorage {
   // User methods
@@ -45,9 +50,41 @@ export interface IStorage {
   createSavedPassword(savedPassword: InsertSavedPassword): Promise<SavedPassword>;
   updateSavedPassword(id: number, updates: Partial<SavedPassword>): Promise<SavedPassword | undefined>;
   deleteSavedPassword(id: number): Promise<boolean>;
+  
+  // MFA Recovery Code methods
+  getRecoveryCode(id: number): Promise<MfaRecoveryCode | undefined>;
+  getRecoveryCodeByCode(code: string): Promise<MfaRecoveryCode | undefined>;
+  getRecoveryCodesByUserId(userId: number): Promise<MfaRecoveryCode[]>;
+  createRecoveryCode(recoveryCode: InsertMfaRecoveryCode): Promise<MfaRecoveryCode>;
+  updateRecoveryCode(id: number, updates: Partial<MfaRecoveryCode>): Promise<MfaRecoveryCode | undefined>;
+  deleteRecoveryCode(id: number): Promise<boolean>;
+  deleteAllRecoveryCodesByUserId(userId: number): Promise<number>;
+  
+  // Session store for authentication
+  getSessionStore(): session.Store;
 }
 
 export class DatabaseStorage implements IStorage {
+  // Using a private property for the session store
+  private _sessionStore: session.Store;
+  
+  constructor() {
+    // Create PostgreSQL session store with connect-pg-simple
+    const PgStore = connectPgSimple(session);
+    
+    // Initialize with proper PostgreSQL-backed session store
+    this._sessionStore = new PgStore({
+      pool,
+      createTableIfMissing: true,
+      tableName: 'session'
+    });
+  }
+  
+  // Implementation of interface method
+  getSessionStore(): session.Store {
+    return this._sessionStore;
+  }
+  
   // User methods
   async getUser(id: number): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.id, id));
@@ -190,6 +227,52 @@ export class DatabaseStorage implements IStorage {
   async deleteSavedPassword(id: number): Promise<boolean> {
     const result = await db.delete(savedPasswords).where(eq(savedPasswords.id, id)).returning();
     return result.length > 0;
+  }
+  
+  // MFA Recovery Code methods
+  async getRecoveryCode(id: number): Promise<MfaRecoveryCode | undefined> {
+    const result = await db.select().from(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async getRecoveryCodeByCode(code: string): Promise<MfaRecoveryCode | undefined> {
+    const result = await db.select().from(mfaRecoveryCodes)
+      .where(and(
+        eq(mfaRecoveryCodes.code, code),
+        eq(mfaRecoveryCodes.used, false)
+      ));
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async getRecoveryCodesByUserId(userId: number): Promise<MfaRecoveryCode[]> {
+    return await db.select().from(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.userId, userId));
+  }
+  
+  async createRecoveryCode(insertRecoveryCode: InsertMfaRecoveryCode): Promise<MfaRecoveryCode> {
+    const result = await db.insert(mfaRecoveryCodes).values(insertRecoveryCode).returning();
+    return result[0];
+  }
+  
+  async updateRecoveryCode(id: number, updates: Partial<MfaRecoveryCode>): Promise<MfaRecoveryCode | undefined> {
+    const result = await db.update(mfaRecoveryCodes)
+      .set(updates)
+      .where(eq(mfaRecoveryCodes.id, id))
+      .returning();
+    
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  async deleteRecoveryCode(id: number): Promise<boolean> {
+    const result = await db.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.id, id)).returning();
+    return result.length > 0;
+  }
+  
+  async deleteAllRecoveryCodesByUserId(userId: number): Promise<number> {
+    const result = await db.delete(mfaRecoveryCodes)
+      .where(eq(mfaRecoveryCodes.userId, userId))
+      .returning();
+    
+    return result.length;
   }
 }
 
@@ -378,6 +461,68 @@ class ResilientStorage implements IStorage {
       () => this.dbStorage.deleteSavedPassword(id),
       () => this.memStorage.deleteSavedPassword(id)
     );
+  }
+  
+  // MFA Recovery Code methods
+  async getRecoveryCode(id: number): Promise<MfaRecoveryCode | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getRecoveryCode(id),
+      () => this.memStorage.getRecoveryCode(id)
+    );
+  }
+  
+  async getRecoveryCodeByCode(code: string): Promise<MfaRecoveryCode | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getRecoveryCodeByCode(code),
+      () => this.memStorage.getRecoveryCodeByCode(code)
+    );
+  }
+  
+  async getRecoveryCodesByUserId(userId: number): Promise<MfaRecoveryCode[]> {
+    return this.withFallback(
+      () => this.dbStorage.getRecoveryCodesByUserId(userId),
+      () => this.memStorage.getRecoveryCodesByUserId(userId)
+    );
+  }
+  
+  async createRecoveryCode(recoveryCode: InsertMfaRecoveryCode): Promise<MfaRecoveryCode> {
+    return this.withFallback(
+      () => this.dbStorage.createRecoveryCode(recoveryCode),
+      () => this.memStorage.createRecoveryCode(recoveryCode)
+    );
+  }
+  
+  async updateRecoveryCode(id: number, updates: Partial<MfaRecoveryCode>): Promise<MfaRecoveryCode | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.updateRecoveryCode(id, updates),
+      () => this.memStorage.updateRecoveryCode(id, updates)
+    );
+  }
+  
+  async deleteRecoveryCode(id: number): Promise<boolean> {
+    return this.withFallback(
+      () => this.dbStorage.deleteRecoveryCode(id),
+      () => this.memStorage.deleteRecoveryCode(id)
+    );
+  }
+  
+  async deleteAllRecoveryCodesByUserId(userId: number): Promise<number> {
+    return this.withFallback(
+      () => this.dbStorage.deleteAllRecoveryCodesByUserId(userId),
+      () => this.memStorage.deleteAllRecoveryCodesByUserId(userId)
+    );
+  }
+  
+  // Session store accessor - implements IStorage interface
+  getSessionStore(): session.Store {
+    return this.useMemoryFallback 
+      ? this.memStorage.getSessionStore() 
+      : this.dbStorage.getSessionStore();
+  }
+  
+  // Backward compatibility with any code that might use this
+  get sessionStore(): session.Store {
+    return this.getSessionStore();
   }
 }
 

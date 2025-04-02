@@ -4,16 +4,27 @@ async function handleResponse(res: Response) {
   if (!res.ok) {
     console.warn(`API response not OK: ${res.status} ${res.statusText}`);
     try {
-      // Clone the response before reading it to avoid "body already read" errors
-      const clonedRes = res.clone();
-      const errorText = await clonedRes.text();
+      // Safely clone the response before reading it
+      let errorText = '';
+      try {
+        const clonedRes = res.clone();
+        errorText = await clonedRes.text();
+      } catch (cloneError) {
+        console.warn('Failed to clone response:', cloneError);
+        errorText = res.statusText || 'Unknown error';
+      }
+      
       console.warn('Error details:', errorText);
       
-      // Try to parse the error response as JSON
+      // Safely try to parse the error response as JSON
       try {
-        const errorJson = JSON.parse(errorText);
-        const errorMessage = errorJson.message || 'Unknown error occurred';
-        throw new Error(errorMessage);
+        if (errorText && errorText.trim() !== '') {
+          const errorJson = JSON.parse(errorText);
+          const errorMessage = errorJson?.message || 'Unknown error occurred';
+          throw new Error(errorMessage);
+        } else {
+          throw new Error(res.statusText || 'Request failed');
+        }
       } catch (jsonError) {
         // If parsing fails, use the status text
         throw new Error(res.statusText || 'Request failed');
@@ -59,6 +70,11 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    if (!queryKey || !queryKey[0]) {
+      console.error("Invalid queryKey:", queryKey);
+      return null;
+    }
+    
     try {
       console.log(`Making query request to ${queryKey[0]}`);
       const res = await fetch(queryKey[0] as string, {
@@ -75,31 +91,37 @@ export const getQueryFn: <T>(options: {
       if (!res.ok) {
         console.warn(`Query response not OK: ${res.status} ${res.statusText}`);
         
-        // Try to read and log the error response
+        // Safely try to read and log the error response
+        let errorJson: any = null;
         try {
           const clonedRes = res.clone();
           const errorText = await clonedRes.text();
-          console.warn('Error response:', errorText);
           
-          // Try to parse it as JSON
-          try {
-            const errorJson = JSON.parse(errorText);
-            if (unauthorizedBehavior === "throw" && res.status === 401) {
-              throw new Error(errorJson.message || "Unauthorized");
+          if (errorText && errorText.trim() !== '') {
+            console.warn('Error response:', errorText);
+            
+            // Try to parse it as JSON
+            try {
+              errorJson = JSON.parse(errorText);
+              if (unauthorizedBehavior === "throw" && res.status === 401) {
+                throw new Error(errorJson?.message || "Unauthorized");
+              }
+            } catch (jsonError) {
+              // Parsing error, ignore
+              console.warn('Error parsing JSON response:', jsonError);
             }
-          } catch (jsonError) {
-            // Parsing error, ignore
           }
         } catch (readError) {
           console.error("Failed to read error response:", readError);
         }
         
         if (res.status === 400) {
-          // For 400 errors, we'll still attempt to parse the response
-          try {
-            return await res.json();
-          } catch (e) {
-            console.error('Failed to parse 400 response:', e);
+          // For 400 errors, we'll return either the parsed JSON or a default error object
+          if (errorJson) {
+            return errorJson;
+          } else {
+            // Return a basic error object if we couldn't parse the response
+            return { error: res.statusText || "Bad Request" };
           }
         }
         

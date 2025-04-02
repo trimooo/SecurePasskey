@@ -6,9 +6,16 @@ import {
   Challenge, 
   InsertChallenge,
   SavedPassword,
-  InsertSavedPassword
+  InsertSavedPassword,
+  MfaRecoveryCode,
+  InsertMfaRecoveryCode
 } from "@shared/schema";
-import { IStorage } from "./storage";
+import type { IStorage } from "./storage";
+import MemoryStore from "memorystore";
+import session from "express-session";
+
+// Create a memory store for session
+const MemorySessionStore = MemoryStore(session);
 
 // In-memory storage implementation for testing/development
 export class MemStorage implements IStorage {
@@ -16,10 +23,22 @@ export class MemStorage implements IStorage {
   private credentials: Credential[] = [];
   private challenges: Challenge[] = [];
   private savedPasswords: SavedPassword[] = [];
+  private recoveryCodeCache: MfaRecoveryCode[] = [];
   private nextUserId = 1;
   private nextCredentialId = 1;
   private nextChallengeId = 1;
   private nextSavedPasswordId = 1;
+  private nextRecoveryCodeId = 1;
+  
+  // Initialize session store
+  private _sessionStore = new MemorySessionStore({
+    checkPeriod: 86400000 // once per day cleanup
+  });
+  
+  // Implement getSessionStore method required by IStorage interface
+  getSessionStore(): session.Store {
+    return this._sessionStore;
+  }
 
   // User methods
   async getUser(id: number): Promise<User | undefined> {
@@ -42,6 +61,13 @@ export class MemStorage implements IStorage {
       registered: false,
       verificationCode: null,
       verificationExpiry: null,
+      lastLogin: null,
+      phone: insertUser.phone || null,
+      mfaEnabled: insertUser.mfaEnabled || false,
+      mfaType: insertUser.mfaType || null,
+      mfaSecret: insertUser.mfaSecret || null,
+      password: insertUser.password || null,
+      name: insertUser.name || null
     };
     this.users.push(user);
     return user;
@@ -193,5 +219,55 @@ export class MemStorage implements IStorage {
     const initialLength = this.savedPasswords.length;
     this.savedPasswords = this.savedPasswords.filter(pwd => pwd.id !== id);
     return this.savedPasswords.length !== initialLength;
+  }
+  
+  // MFA Recovery Code methods
+  async getRecoveryCode(id: number): Promise<MfaRecoveryCode | undefined> {
+    return this.recoveryCodeCache.find(code => code.id === id);
+  }
+  
+  async getRecoveryCodeByCode(code: string): Promise<MfaRecoveryCode | undefined> {
+    return this.recoveryCodeCache.find(c => c.code === code && !c.used);
+  }
+  
+  async getRecoveryCodesByUserId(userId: number): Promise<MfaRecoveryCode[]> {
+    return this.recoveryCodeCache.filter(code => code.userId === userId);
+  }
+  
+  async createRecoveryCode(insertRecoveryCode: InsertMfaRecoveryCode): Promise<MfaRecoveryCode> {
+    const id = this.nextRecoveryCodeId++;
+    const now = new Date();
+    const recoveryCode: MfaRecoveryCode = {
+      id,
+      userId: insertRecoveryCode.userId,
+      code: insertRecoveryCode.code,
+      used: insertRecoveryCode.used || false,
+      createdAt: now,
+      usedAt: null
+    };
+    this.recoveryCodeCache.push(recoveryCode);
+    return recoveryCode;
+  }
+  
+  async updateRecoveryCode(id: number, updates: Partial<MfaRecoveryCode>): Promise<MfaRecoveryCode | undefined> {
+    const index = this.recoveryCodeCache.findIndex(code => code.id === id);
+    if (index === -1) return undefined;
+    
+    const recoveryCode = this.recoveryCodeCache[index];
+    const updatedRecoveryCode = { ...recoveryCode, ...updates };
+    this.recoveryCodeCache[index] = updatedRecoveryCode;
+    return updatedRecoveryCode;
+  }
+  
+  async deleteRecoveryCode(id: number): Promise<boolean> {
+    const initialLength = this.recoveryCodeCache.length;
+    this.recoveryCodeCache = this.recoveryCodeCache.filter(code => code.id !== id);
+    return this.recoveryCodeCache.length !== initialLength;
+  }
+  
+  async deleteAllRecoveryCodesByUserId(userId: number): Promise<number> {
+    const initialLength = this.recoveryCodeCache.length;
+    this.recoveryCodeCache = this.recoveryCodeCache.filter(code => code.userId !== userId);
+    return initialLength - this.recoveryCodeCache.length;
   }
 }

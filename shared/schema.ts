@@ -11,9 +11,13 @@ export const users = pgTable("users", {
   name: text("name"),
   password: text("password"),
   mfaEnabled: boolean("mfa_enabled").default(false),
+  mfaType: text("mfa_type"), // 'totp', 'email', 'sms', null
+  mfaSecret: text("mfa_secret"), // For TOTP
+  phone: text("phone"), // For SMS MFA
   registered: boolean("registered").notNull().default(false),
   verificationCode: text("verification_code"),
   verificationExpiry: timestamp("verification_expiry"),
+  lastLogin: timestamp("last_login"),
 });
 
 export const credentials = pgTable("credentials", {
@@ -30,10 +34,20 @@ export const challenges = pgTable("challenges", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
   challenge: text("challenge").notNull(),
-  type: text("type").notNull(), // 'registration' or 'authentication'
+  type: text("type").notNull(), // 'registration', 'authentication', 'mfa'
   qrCode: text("qr_code"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
+});
+
+// MFA recovery codes
+export const mfaRecoveryCodes = pgTable("mfa_recovery_codes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  usedAt: timestamp("used_at"),
 });
 
 // Password manager table
@@ -54,6 +68,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   credentials: many(credentials),
   challenges: many(challenges),
   savedPasswords: many(savedPasswords),
+  recoveryCodes: many(mfaRecoveryCodes),
 }));
 
 export const credentialsRelations = relations(credentials, ({ one }) => ({
@@ -77,6 +92,13 @@ export const savedPasswordsRelations = relations(savedPasswords, ({ one }) => ({
   }),
 }));
 
+export const mfaRecoveryCodesRelations = relations(mfaRecoveryCodes, ({ one }) => ({
+  user: one(users, {
+    fields: [mfaRecoveryCodes.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -85,6 +107,9 @@ export const insertUserSchema = createInsertSchema(users).pick({
   name: true,
   password: true,
   mfaEnabled: true,
+  mfaType: true,
+  mfaSecret: true,
+  phone: true,
   registered: true,
 });
 
@@ -116,6 +141,13 @@ export const insertSavedPasswordSchema = createInsertSchema(savedPasswords)
     notes: true,
   });
 
+export const insertMfaRecoveryCodeSchema = createInsertSchema(mfaRecoveryCodes)
+  .pick({
+    userId: true,
+    code: true,
+    used: true,
+  });
+
 // Types
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -129,6 +161,9 @@ export type Challenge = typeof challenges.$inferSelect;
 
 export type InsertSavedPassword = z.infer<typeof insertSavedPasswordSchema>;
 export type SavedPassword = typeof savedPasswords.$inferSelect;
+
+export type InsertMfaRecoveryCode = z.infer<typeof insertMfaRecoveryCodeSchema>;
+export type MfaRecoveryCode = typeof mfaRecoveryCodes.$inferSelect;
 
 // Extended schemas
 export const webAuthnRegistrationInputSchema = z.object({

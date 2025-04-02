@@ -39,6 +39,18 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
 
 // Set up authentication routes and middleware
 export function setupAuthRoutes(app: Express) {
+  // Setup session middleware
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'local-dev-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+    },
+    store: storage.getSessionStore()
+  }));
+  
   // Register a new user
   app.post('/api/register', async (req: Request, res: Response) => {
     try {
