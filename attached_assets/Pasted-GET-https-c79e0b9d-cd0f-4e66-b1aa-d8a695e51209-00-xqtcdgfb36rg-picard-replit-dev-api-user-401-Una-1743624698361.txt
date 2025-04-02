@@ -1,0 +1,65 @@
+GET https://c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/api/user 401 (Unauthorized)
+(anonymous) @ queryClient.ts:80
+fetchFn @ @tanstack_react-query.js?v=9b59fcd8:840
+run @ @tanstack_react-query.js?v=9b59fcd8:494
+start @ @tanstack_react-query.js?v=9b59fcd8:536
+fetch @ @tanstack_react-query.js?v=9b59fcd8:926
+executeFetch_fn @ @tanstack_react-query.js?v=9b59fcd8:2211
+onSubscribe @ @tanstack_react-query.js?v=9b59fcd8:1898
+subscribe @ @tanstack_react-query.js?v=9b59fcd8:24
+(anonymous) @ @tanstack_react-query.js?v=9b59fcd8:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=9b59fcd8:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=9b59fcd8:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=9b59fcd8:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=9b59fcd8:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=9b59fcd8:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=9b59fcd8:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=9b59fcd8:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=9b59fcd8:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=9b59fcd8:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=9b59fcd8:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=9b59fcd8:19432
+commitRoot @ chunk-RPCDYKBN.js?v=9b59fcd8:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=9b59fcd8:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=9b59fcd8:18718
+workLoop @ chunk-RPCDYKBN.js?v=9b59fcd8:197
+flushWork @ chunk-RPCDYKBN.js?v=9b59fcd8:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=9b59fcd8:384Understand this errorAI
+Home.tsx:80 Uncaught TypeError: logout is not a function
+    at handleLogout (Home.tsx:80:5)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=9b59fcd8:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=9b59fcd8:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=9b59fcd8:3733:39)
+    at invokeGuardedCallbackAndCatchFirstError (chunk-RPCDYKBN.js?v=9b59fcd8:3736:33)
+    at executeDispatch (chunk-RPCDYKBN.js?v=9b59fcd8:7014:11)
+    at processDispatchQueueItemsInOrder (chunk-RPCDYKBN.js?v=9b59fcd8:7034:15)
+    at processDispatchQueue (chunk-RPCDYKBN.js?v=9b59fcd8:7043:13)
+    at dispatchEventsForPlugins (chunk-RPCDYKBN.js?v=9b59fcd8:7051:11)
+    at chunk-RPCDYKBN.js?v=9b59fcd8:7174:20
+handleLogout @ Home.tsx:80
+callCallback2 @ chunk-RPCDYKBN.js?v=9b59fcd8:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=9b59fcd8:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=9b59fcd8:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-RPCDYKBN.js?v=9b59fcd8:3736
+executeDispatch @ chunk-RPCDYKBN.js?v=9b59fcd8:7014
+processDispatchQueueItemsInOrder @ chunk-RPCDYKBN.js?v=9b59fcd8:7034
+processDispatchQueue @ chunk-RPCDYKBN.js?v=9b59fcd8:7043
+dispatchEventsForPlugins @ chunk-RPCDYKBN.js?v=9b59fcd8:7051
+(anonymous) @ chunk-RPCDYKBN.js?v=9b59fcd8:7174
+batchedUpdates$1 @ chunk-RPCDYKBN.js?v=9b59fcd8:18913
+batchedUpdates @ chunk-RPCDYKBN.js?v=9b59fcd8:3579
+dispatchEventForPluginEventSystem @ chunk-RPCDYKBN.js?v=9b59fcd8:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-RPCDYKBN.js?v=9b59fcd8:5478
+dispatchEvent @ chunk-RPCDYKBN.js?v=9b59fcd8:5472
+dispatchDiscreteEvent @ chunk-RPCDYKBN.js?v=9b59fcd8:5449Understand this errorAI
+chunk-RPCDYKBN.js?v=9b59fcd8:3750 Uncaught TypeError: logout is not a function
+    at handleLogout (Home.tsx:80:5)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=9b59fcd8:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=9b59fcd8:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=9b59fcd8:3733:39)
+    at invokeGuardedCallbackAndCatchFirstError (chunk-RPCDYKBN.js?v=9b59fcd8:3736:33)
+    at executeDispatch (chunk-RPCDYKBN.js?v=9b59fcd8:7014:11)
+    at processDispatchQueueItemsInOrder (chunk-RPCDYKBN.js?v=9b59fcd8:7034:15)
+    at processDispatchQueue (chunk-RPCDYKBN.js?v=9b59fcd8:7043:13)
+    at dispatchEventsForPlugins (chunk-RPCDYKBN.js?v=9b59fcd8:7051:11)
+    at chunk-RPCDYKBN.js?v=9b59fcd8:7174:20

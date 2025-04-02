@@ -16,7 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { SavedPassword } from "@shared/schema";
 
 export default function Home() {
-  const { user, logout } = useAuth();
+  const { user, logoutMutation } = useAuth();
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -77,8 +77,11 @@ export default function Home() {
   }) : [];
 
   const handleLogout = () => {
-    logout();
-    setLocation("/");
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        setLocation("/auth");
+      }
+    });
   };
 
   const handleEditPassword = (password: SavedPassword) => {
