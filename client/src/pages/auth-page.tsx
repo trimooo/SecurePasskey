@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -7,65 +7,40 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KeySquare, ShieldAlert, UserRoundCheck } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
-import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, error, loginMutation, registerMutation } = useAuth();
   const { toast } = useToast();
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [activeTab, setActiveTab] = useState('login');
   
-  // Redirect if already logged in
-  if (user && !isLoading) {
-    setLocation('/');
-    return null;
-  }
-
-  // Login mutation
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: { email: string; password: string }) => {
-      const res = await apiRequest('POST', '/api/auth/login', credentials);
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+  // Debug - log auth state changes
+  useEffect(() => {
+    console.log('Auth page state:', { 
+      user: user ? `User: ${user.username}` : 'No user', 
+      isLoading, 
+      loginPending: loginMutation.isPending,
+      registerPending: registerMutation.isPending,
+      error 
+    });
+    
+    // If user is logged in, redirect to home
+    if (user && !isLoading) {
+      console.log('User logged in, redirecting to home');
       setLocation('/');
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Login failed',
-        description: error.message || 'Invalid credentials',
-        variant: 'destructive',
-      });
-    },
-  });
+    }
+  }, [user, isLoading, loginMutation.isPending, registerMutation.isPending, error, setLocation]);
 
-  // Register mutation
-  const registerMutation = useMutation({
-    mutationFn: async (credentials: { email: string; password: string; name: string }) => {
-      const res = await apiRequest('POST', '/api/auth/register', credentials);
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
-      setLocation('/');
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Registration failed',
-        description: error.message || 'Could not create account',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const handleLogin = (e: React.FormEvent) => {
+  // Separate login handler
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!username || !password) {
       toast({
         title: 'Invalid input',
         description: 'Please fill in all fields',
@@ -73,12 +48,20 @@ export default function AuthPage() {
       });
       return;
     }
-    loginMutation.mutate({ email, password });
+    
+    console.log('Attempting login with username:', username);
+    
+    // Use the username directly for login
+    loginMutation.mutate({ 
+      username, 
+      password 
+    });
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  // Separate register handler
+  const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || !name) {
+    if (!username || !email || !password) {
       toast({
         title: 'Invalid input',
         description: 'Please fill in all fields',
@@ -86,7 +69,18 @@ export default function AuthPage() {
       });
       return;
     }
-    registerMutation.mutate({ email, password, name });
+    
+    console.log('Attempting registration with username:', username, 'and email:', email);
+    
+    // Register with provided details
+    registerMutation.mutate({ 
+      username, 
+      password,
+      email,
+      registered: true,
+      // Name is optional in the schema
+      ...(name ? { name } : {})
+    });
   };
 
   return (
@@ -101,22 +95,38 @@ export default function AuthPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
               </TabsList>
               
+              {loginMutation.error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>
+                    {loginMutation.error.message || 'Login failed. Please try again.'}
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {registerMutation.error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>
+                    {registerMutation.error.message || 'Registration failed. Please try again.'}
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLoginSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="username">Username</Label>
                     <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="you@example.com" 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      id="username" 
+                      type="text" 
+                      placeholder="yourusername" 
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -147,9 +157,19 @@ export default function AuthPage() {
               </TabsContent>
               
               <TabsContent value="register">
-                <form onSubmit={handleRegister} className="space-y-4">
+                <form onSubmit={handleRegisterSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
+                    <Label htmlFor="username">Username</Label>
+                    <Input 
+                      id="username" 
+                      type="text" 
+                      placeholder="yourusername" 
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name (optional)</Label>
                     <Input 
                       id="name" 
                       type="text" 

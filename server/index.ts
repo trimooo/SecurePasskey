@@ -3,15 +3,12 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import session from "express-session";
 import crypto from "crypto";
-import connectPgSimple from "connect-pg-simple";
-import { pool } from "./db";
+import createMemoryStore from "memorystore";
 
-// Create session store
-const PgSession = connectPgSimple(session);
-const sessionStore = new PgSession({
-  pool,
-  tableName: 'sessions',
-  createTableIfMissing: true
+// Create in-memory session store for simplicity
+const MemoryStore = createMemoryStore(session);
+const sessionStore = new MemoryStore({
+  checkPeriod: 86400000, // prune expired entries every 24h
 });
 
 // Generate a random session secret if none is provided
