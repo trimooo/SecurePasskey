@@ -65,35 +65,36 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
       
       setChallenge(data);
       
-      // Generate QR code image
-      if (qrCanvasRef.current && data.qrCode) {
-        try {
-          await QRCode.toCanvas(qrCanvasRef.current, data.qrCode, {
-            width: 192,
-            margin: 0,
-            color: {
-              dark: '#1C1C1E',
-              light: '#FFFFFF'
-            }
-          });
-        } catch (qrError) {
-          console.error("QR code generation error:", qrError);
+      // Generate QR code image with a small delay to ensure canvas is ready
+      setTimeout(async () => {
+        if (qrCanvasRef.current && data.qrCode) {
+          try {
+            await QRCode.toCanvas(qrCanvasRef.current, data.qrCode, {
+              width: 192,
+              margin: 0,
+              color: {
+                dark: '#1C1C1E',
+                light: '#FFFFFF'
+              }
+            });
+            console.log("QR code successfully generated");
+          } catch (qrError) {
+            console.error("QR code generation error:", qrError);
+            toast({
+              title: "QR Rendering Error",
+              description: "Could not render QR code. Please try again.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          console.error("QR canvas reference not available and send me direct to the app not home to signup");
           toast({
-            title: "QR Rendering Error",
-            description: "Could not render QR code. Please try again.",
+            title: "QR Code Error",
+            description: "Could not create QR code display",
             variant: "destructive",
           });
-          return;
         }
-      } else {
-        console.error("QR canvas reference not available");
-        toast({
-          title: "QR Code Error",
-          description: "Could not create QR code display",
-          variant: "destructive",
-        });
-        return;
-      }
+      }, 100);
       
       // Start polling for verification
       startPolling(data.id);
