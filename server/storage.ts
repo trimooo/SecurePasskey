@@ -196,6 +196,15 @@ export class DatabaseStorage implements IStorage {
 // Import in-memory storage for development/testing
 import { MemStorage } from './memory-storage';
 
-// Use in-memory storage due to database connection issues
-// export const storage = new DatabaseStorage();
-export const storage = new MemStorage();
+// Try to use database storage first, fall back to in-memory if issues arise
+let storage: IStorage;
+try {
+  storage = new DatabaseStorage();
+  console.log("Using database storage");
+} catch (error) {
+  console.error("Database connection failed, falling back to in-memory storage:", error);
+  storage = new MemStorage();
+  console.log("Using in-memory storage");
+}
+
+export { storage };

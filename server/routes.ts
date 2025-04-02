@@ -8,7 +8,7 @@ interface Request extends ExpressRequest {
   };
 }
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, IStorage } from "./storage";
 import { 
   generateChallenge, 
   bufferToBase64URL, 
@@ -22,7 +22,7 @@ import {
 } from "./webAuthn";
 import crypto from 'crypto';
 import { z } from "zod";
-import { webAuthnRegistrationInputSchema, webAuthnLoginInputSchema, insertUserSchema, SavedPassword } from "@shared/schema";
+import { webAuthnRegistrationInputSchema, webAuthnLoginInputSchema, insertUserSchema, SavedPassword, Challenge, Credential } from "@shared/schema";
 
 // Configuration for WebAuthn
 const WEBAUTHN_CONFIG = {
@@ -197,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get active challenges for user
       const challenges = await storage.getChallengesByUserId(user.id);
-      let challenge = challenges.find(c => c.type === 'registration' && new Date(c.expiresAt) > new Date());
+      let challenge = challenges.find((c: Challenge) => c.type === 'registration' && new Date(c.expiresAt) > new Date());
       
       if (!challenge) {
         return res.status(400).json({ message: 'No active challenge found' });
@@ -219,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use the client-provided expected challenge if available
       if (expectedChallenge && expectedChallenge !== challenge.challenge) {
         // Check if there's another matching challenge
-        const matchingChallenge = challenges.find(c => 
+        const matchingChallenge = challenges.find((c: Challenge) => 
           c.type === 'registration' && 
           c.challenge === expectedChallenge && 
           new Date(c.expiresAt) > new Date()
@@ -342,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Login request from host: ${host}, using domain: ${domain} as rpId`);
       
       // Create authentication options
-      const allowCredentials = credentials.map(credential => ({
+      const allowCredentials = credentials.map((credential) => ({
         id: credential.credentialId,
         type: 'public-key' as const,
       }));
@@ -400,7 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get active challenges for user
       const challenges = await storage.getChallengesByUserId(user.id);
-      let challenge = challenges.find(c => c.type === 'authentication' && new Date(c.expiresAt) > new Date());
+      let challenge = challenges.find((c: Challenge) => c.type === 'authentication' && new Date(c.expiresAt) > new Date());
       
       if (!challenge) {
         return res.status(400).json({ message: 'No active challenge found' });
@@ -433,7 +433,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use the client-provided expected challenge if available
       if (expectedChallenge && expectedChallenge !== challenge.challenge) {
         // Check if there's another matching challenge
-        const matchingChallenge = challenges.find(c => 
+        const matchingChallenge = challenges.find((c: Challenge) => 
           c.type === 'authentication' && 
           c.challenge === expectedChallenge && 
           new Date(c.expiresAt) > new Date()
@@ -546,9 +546,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Generate challenge
+      // Generate challenge with limited-time validity
       const challenge = generateChallenge();
-      const expiresAt = new Date(Date.now() + WEBAUTHN_CONFIG.challengeTimeout);
+      
+      // Set expiration to 5 minutes from now (shortened for security)
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
       
       // Generate unique challenge ID for QR code
       // If userId is undefined, we're creating an anonymous QR code
@@ -635,9 +637,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Password manager APIs
   
-  // Get saved passwords for a user
+  // Get all saved passwords for the authenticated user
   app.get('/api/passwords', async (req: Request, res: Response) => {
     try {
+      // Add a delay to prevent rapid scanning of QR codes
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       const userId = req.session?.userId;
       if (!userId) {
         return res.status(401).json({ message: 'User not authenticated' });
