@@ -8,6 +8,9 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
+  name: text("name"),
+  password: text("password"),
+  mfaEnabled: boolean("mfa_enabled").default(false),
   registered: boolean("registered").notNull().default(false),
   verificationCode: text("verification_code"),
   verificationExpiry: timestamp("verification_expiry"),
@@ -79,6 +82,10 @@ export const savedPasswordsRelations = relations(savedPasswords, ({ one }) => ({
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   username: true,
+  name: true,
+  password: true,
+  mfaEnabled: true,
+  registered: true,
 });
 
 export const insertCredentialSchema = createInsertSchema(credentials).pick({

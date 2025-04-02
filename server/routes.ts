@@ -1,11 +1,9 @@
-import type { Express, Request as ExpressRequest, Response } from "express";
+import type { Express, Request as ExpressRequest, Response, NextFunction } from "express";
+import { setupAuthRoutes } from "./auth";
 
-// Extend Request type to include session
+// Extend Request type to include user
 interface Request extends ExpressRequest {
-  session?: {
-    userId?: number;
-    [key: string]: any;
-  };
+  user?: any;
 }
 import { createServer, type Server } from "http";
 import { storage, IStorage } from "./storage";
@@ -51,6 +49,8 @@ function getOrigin(req: Request): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup auth routes and get the requireAuth middleware
+  const { requireAuth } = setupAuthRoutes(app);
   // Clean up expired challenges periodically
   let cleanupRunning = false;
   setInterval(async () => {
@@ -638,15 +638,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Password manager APIs
   
   // Get all saved passwords for the authenticated user
-  app.get('/api/passwords', async (req: Request, res: Response) => {
+  app.get('/api/passwords', requireAuth, async (req: Request, res: Response) => {
     try {
       // Add a delay to prevent rapid scanning of QR codes
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const userId = req.session?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' });
-      }
+      const userId = (req as any).user.id;
 
       const passwords = await storage.getSavedPasswordsByUserId(userId);
       return res.json(passwords);
@@ -657,12 +654,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add a new saved password
-  app.post('/api/passwords', async (req: Request, res: Response) => {
+  app.post('/api/passwords', requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.session?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' });
-      }
+      const userId = (req as any).user.id;
 
       const { website, url, username, password, notes } = req.body;
       
@@ -687,12 +681,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a saved password
-  app.put('/api/passwords/:id', async (req: Request, res: Response) => {
+  app.put('/api/passwords/:id', requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.session?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' });
-      }
+      const userId = (req as any).user.id;
 
       const passwordId = parseInt(req.params.id);
       if (isNaN(passwordId)) {
@@ -727,12 +718,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a saved password
-  app.delete('/api/passwords/:id', async (req: Request, res: Response) => {
+  app.delete('/api/passwords/:id', requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.session?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' });
-      }
+      const userId = (req as any).user.id;
 
       const passwordId = parseInt(req.params.id);
       if (isNaN(passwordId)) {
@@ -762,12 +750,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Generate a security health report
-  app.get('/api/security-report', async (req: Request, res: Response) => {
+  app.get('/api/security-report', requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.session?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' });
-      }
+      const userId = (req as any).user.id;
 
       // Get all passwords for this user
       const passwords = await storage.getSavedPasswordsByUserId(userId);
