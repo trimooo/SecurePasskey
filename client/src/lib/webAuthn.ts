@@ -90,16 +90,23 @@ export async function completeRegistration(email: string, credential: any) {
       clientDataJSON,
     },
     authenticatorAttachment: credential.authenticatorAttachment,
-    clientExtensionResults: credential.clientExtensionResults,
+    clientExtensionResults: credential.clientExtensionResults || {},
     transports: credential.response.getTransports ? credential.response.getTransports() : undefined,
   };
 
-  // Include the expected challenge directly
-  return apiRequest('POST', '/api/auth/register/complete', { 
+  // Include the expected challenge directly and handle the response properly
+  const apiResponse = await apiRequest('POST', '/api/auth/register/complete', { 
     email, 
     credential: response,
     expectedChallenge: currentChallenge // Pass the original challenge
   });
+  
+  if (!apiResponse.ok) {
+    const errorText = await apiResponse.text();
+    throw new Error(`Registration complete failed: ${apiResponse.status} ${errorText}`);
+  }
+  
+  return await apiResponse.json();
 }
 
 // Start WebAuthn login
@@ -182,15 +189,23 @@ export async function completeLogin(email: string, credential: any) {
       signature: bufferToBase64URLString(credential.response.signature),
       userHandle: credential.response.userHandle ? bufferToBase64URLString(credential.response.userHandle) : null,
     },
-    clientExtensionResults: credential.clientExtensionResults,
+    // Ensure clientExtensionResults is always a valid object even if undefined
+    clientExtensionResults: credential.clientExtensionResults || {},
   };
 
-  // Include the expected challenge directly
-  return apiRequest('POST', '/api/auth/login/complete', { 
+  // Include the expected challenge directly and handle the response properly
+  const apiResponse = await apiRequest('POST', '/api/auth/login/complete', { 
     email, 
     credential: response,
     expectedChallenge: currentChallenge // Pass the original challenge
   });
+  
+  if (!apiResponse.ok) {
+    const errorText = await apiResponse.text();
+    throw new Error(`Login complete failed: ${apiResponse.status} ${errorText}`);
+  }
+  
+  return await apiResponse.json();
 }
 
 // Get QR code for login

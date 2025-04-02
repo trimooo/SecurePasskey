@@ -103,23 +103,10 @@ export default function PasskeyLoginScreen({ onBack, onShowQR, onSuccess }: Pass
       
       // Complete the login
       try {
-        const response = await completeLogin(email, credential);
-        
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error("Server login error:", errorData);
-          toast({
-            title: "Authentication Failed",
-            description: "Server couldn't verify your passkey. Please try again later.",
-            variant: "destructive",
-          });
-          return;
-        }
-        
-        const userData = await response.json();
+        const result = await completeLogin(email, credential);
         
         // Update user state
-        setUser(userData.user);
+        setUser(result.user);
         
         toast({
           title: "Success",

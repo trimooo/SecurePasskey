@@ -175,6 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             clientDataJSON: z.string(),
           }),
           authenticatorAttachment: z.string().optional(),
+          clientExtensionResults: z.record(z.any()).default({}),
           transports: z.array(z.string()).optional(),
         }),
         expectedChallenge: z.string().nullable().optional(),
@@ -367,7 +368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             signature: z.string(),
             userHandle: z.string().nullable(),
           }),
-          clientExtensionResults: z.record(z.any()),
+          clientExtensionResults: z.record(z.any()).default({}),
         }),
         expectedChallenge: z.string().nullable().optional(),
       }).parse(req.body);
