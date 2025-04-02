@@ -49,35 +49,107 @@ export default function PasskeyCreationScreen({ onBack, onSuccess }: PasskeyCrea
       setIsCreating(true);
       
       // Start the registration process
-      const options = await startRegistration(email);
+      let options;
+      try {
+        options = await startRegistration(email);
+      } catch (error) {
+        console.error("Error starting registration:", error);
+        toast({
+          title: "Registration Error",
+          description: "Could not initiate registration. Please try again later.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       // Create the credential
-      const credential = await navigator.credentials.create({
-        publicKey: options as PublicKeyCredentialCreationOptions,
-      });
+      let credential;
+      try {
+        credential = await navigator.credentials.create({
+          publicKey: options as PublicKeyCredentialCreationOptions,
+        });
+      } catch (error) {
+        console.error("Credential creation error:", error);
+        
+        // Handle specific WebAuthn errors
+        if (error instanceof DOMException) {
+          if (error.name === "NotAllowedError") {
+            toast({
+              title: "Permission Denied",
+              description: "You declined the authentication request. Please try again.",
+              variant: "destructive",
+            });
+          } else if (error.name === "AbortError") {
+            toast({
+              title: "Operation Canceled",
+              description: "The authentication operation was canceled. Please try again.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Authentication Error",
+              description: `${error.name}: ${error.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Credential Error",
+            description: "Failed to create security key. Your device might not be compatible.",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
       
       if (!credential) {
-        throw new Error("Failed to create credential");
+        toast({
+          title: "Registration Failed",
+          description: "No credential was created. Please try again.",
+          variant: "destructive",
+        });
+        return;
       }
       
       // Complete the registration
-      const response = await completeRegistration(email, credential);
-      const userData = await response.json();
-      
-      // Update user state
-      setUser(userData.user);
-      
-      toast({
-        title: "Success",
-        description: "Passkey created successfully",
-      });
-      
-      onSuccess();
+      try {
+        const response = await completeRegistration(email, credential);
+        
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error("Server registration error:", errorData);
+          toast({
+            title: "Registration Failed",
+            description: "The server couldn't complete registration. Please try again later.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        const userData = await response.json();
+        
+        // Update user state
+        setUser(userData.user);
+        
+        toast({
+          title: "Success",
+          description: "Passkey created successfully",
+        });
+        
+        onSuccess();
+      } catch (error) {
+        console.error("Error completing registration:", error);
+        toast({
+          title: "Registration Error",
+          description: "Could not complete registration. Please try again later.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
-      console.error("Error creating passkey:", error);
+      console.error("Unexpected error creating passkey:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create passkey",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive",
       });
     } finally {

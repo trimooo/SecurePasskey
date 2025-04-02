@@ -1,10 +1,19 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-async function throwIfResNotOk(res: Response) {
+async function handleResponse(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    console.warn(`API response not OK: ${res.status} ${res.statusText}`);
+    try {
+      const errorText = await res.text();
+      console.warn('Error details:', errorText);
+      // Return the response without throwing to handle errors at the mutation level
+      return res;
+    } catch (e) {
+      console.error('Failed to parse error response:', e);
+      return res;
+    }
   }
+  return res;
 }
 
 export async function apiRequest(
@@ -12,20 +21,21 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  console.log(`API Request: ${method} ${url}`, data);
-  const body = data ? JSON.stringify(data) : undefined;
-  console.log('Request body:', body);
-  
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body,
-    credentials: "include",
-  });
+  try {
+    const body = data ? JSON.stringify(data) : undefined;
+    
+    const res = await fetch(url, {
+      method,
+      headers: data ? { "Content-Type": "application/json" } : {},
+      body,
+      credentials: "include",
+    });
 
-  await throwIfResNotOk(res);
-  console.log(`API Response: ${res.status} ${res.statusText}`);
-  return res;
+    return await handleResponse(res);
+  } catch (error) {
+    console.error(`API request failed for ${method} ${url}:`, error);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -34,16 +44,34 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
-    });
+    try {
+      const res = await fetch(queryKey[0] as string, {
+        credentials: "include",
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      if (!res.ok) {
+        console.warn(`Query response not OK: ${res.status} ${res.statusText}`);
+        if (res.status === 400) {
+          // For 400 errors, we'll still attempt to parse the response
+          try {
+            return await res.json();
+          } catch (e) {
+            console.error('Failed to parse 400 response:', e);
+          }
+        }
+        // For other error types, return null or a default value
+        return null;
+      }
+      
+      return await res.json();
+    } catch (error) {
+      console.error(`Query failed for ${queryKey[0]}:`, error);
       return null;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({

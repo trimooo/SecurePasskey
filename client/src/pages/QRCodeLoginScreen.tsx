@@ -35,19 +35,64 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
     
     try {
       setIsLoading(true);
-      const data = await getQRCodeChallenge(email);
+      
+      // Stop previous polling and timer
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+      
+      let data;
+      try {
+        data = await getQRCodeChallenge(email);
+      } catch (error) {
+        console.error("Error fetching QR challenge:", error);
+        toast({
+          title: "Service Unavailable",
+          description: "Could not generate QR code. Please try again later.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (!data || !data.qrCode) {
+        console.error("Invalid QR code data:", data);
+        toast({
+          title: "Error",
+          description: "Received invalid QR code data from server",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       setChallenge(data);
       
       // Generate QR code image
       if (qrCanvasRef.current && data.qrCode) {
-        await QRCode.toCanvas(qrCanvasRef.current, data.qrCode, {
-          width: 192,
-          margin: 0,
-          color: {
-            dark: '#1C1C1E',
-            light: '#FFFFFF'
-          }
+        try {
+          await QRCode.toCanvas(qrCanvasRef.current, data.qrCode, {
+            width: 192,
+            margin: 0,
+            color: {
+              dark: '#1C1C1E',
+              light: '#FFFFFF'
+            }
+          });
+        } catch (qrError) {
+          console.error("QR code generation error:", qrError);
+          toast({
+            title: "QR Rendering Error",
+            description: "Could not render QR code. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } else {
+        console.error("QR canvas reference not available");
+        toast({
+          title: "QR Code Error",
+          description: "Could not create QR code display",
+          variant: "destructive",
         });
+        return;
       }
       
       // Start polling for verification
@@ -55,11 +100,16 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
       
       // Start countdown timer
       startTimer(new Date(data.expiresAt));
+      
+      toast({
+        title: "QR Code Ready",
+        description: "Scan with your other device to log in",
+      });
     } catch (error) {
-      console.error("Error generating QR code:", error);
+      console.error("Unexpected error generating QR code:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to generate QR code",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive",
       });
     } finally {
@@ -74,22 +124,48 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
       clearInterval(pollingRef.current);
     }
     
+    let failedAttempts = 0;
+    const maxFailedAttempts = 3;
+    
     // Poll every 2 seconds to check if QR code has been verified
     pollingRef.current = setInterval(async () => {
       try {
         const response = await verifyQRCode(challengeId);
+        
+        // Reset failed attempts counter
+        failedAttempts = 0;
+        
         if (response.verified) {
           // Stop polling and update user
-          clearInterval(pollingRef.current!);
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          
+          // Stop the timer
+          if (timerRef.current) clearInterval(timerRef.current);
+          
+          // Update authentication state
           setUser(response.user);
+          
           toast({
             title: "Success",
             description: "QR code authentication successful",
           });
+          
           onSuccess();
         }
       } catch (error) {
-        console.error("Error verifying QR code:", error);
+        failedAttempts++;
+        console.error(`Error verifying QR code (attempt ${failedAttempts}/${maxFailedAttempts}):`, error);
+        
+        if (failedAttempts >= maxFailedAttempts) {
+          // If we've had too many failed attempts, stop polling
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          
+          toast({
+            title: "Connection Issue",
+            description: "Verification service is unavailable. Try refreshing the QR code.",
+            variant: "destructive",
+          });
+        }
       }
     }, 2000);
   };

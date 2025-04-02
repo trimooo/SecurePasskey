@@ -33,20 +33,45 @@ export default function EmailInputScreen({ onNext }: EmailInputScreenProps) {
   
   const checkUserMutation = useMutation({
     mutationFn: async (email: string) => {
-      const res = await apiRequest("POST", "/api/auth/check-user", { email });
-      return res.json();
+      try {
+        const res = await apiRequest("POST", "/api/auth/check-user", { email });
+        
+        if (!res.ok) {
+          console.warn(`Check user request failed with status: ${res.status}`);
+          // For non-200 responses, we'll create a default response
+          return { exists: false, error: true };
+        }
+        
+        return await res.json();
+      } catch (error) {
+        console.error("Error in checkUserMutation:", error);
+        // Return a sensible default to prevent app from crashing
+        return { exists: false, error: true };
+      }
     },
     onSuccess: (data) => {
+      if (data.error) {
+        toast({
+          title: "Warning",
+          description: "Couldn't verify your account status. Proceeding as a new user.",
+          variant: "default",
+        });
+      }
+      
       setEmail(form.getValues().email);
-      onNext(data.exists);
+      onNext(data.exists || false);
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to check user status",
-        variant: "destructive",
+        title: "Notice",
+        description: "Continuing as a new user",
+        variant: "default", 
       });
       console.error("Error checking user:", error);
+      
+      // Still proceed with the flow even on error
+      setEmail(form.getValues().email);
+      onNext(false);
     },
     onSettled: () => {
       setIsLoading(false);

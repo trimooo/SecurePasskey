@@ -31,35 +31,115 @@ export default function PasskeyLoginScreen({ onBack, onShowQR, onSuccess }: Pass
       setIsLoggingIn(true);
       
       // Start the login process
-      const options = await startLogin(email);
+      let options;
+      try {
+        options = await startLogin(email);
+      } catch (error) {
+        console.error("Error starting login:", error);
+        toast({
+          title: "Login Error",
+          description: "Could not initiate login. Your account might not have a passkey or the server is unavailable.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       // Get the credential
-      const credential = await navigator.credentials.get({
-        publicKey: options as PublicKeyCredentialRequestOptions,
-      });
+      let credential;
+      try {
+        credential = await navigator.credentials.get({
+          publicKey: options as PublicKeyCredentialRequestOptions,
+        });
+      } catch (error) {
+        console.error("Credential retrieval error:", error);
+        
+        // Handle specific WebAuthn errors
+        if (error instanceof DOMException) {
+          if (error.name === "NotAllowedError") {
+            toast({
+              title: "Authentication Declined",
+              description: "You declined the authentication request. Please try again.",
+              variant: "destructive",
+            });
+          } else if (error.name === "AbortError") {
+            toast({
+              title: "Operation Canceled",
+              description: "The authentication operation was canceled. Please try again.",
+              variant: "destructive",
+            });
+          } else if (error.name === "NotFoundError") {
+            toast({
+              title: "Passkey Not Found",
+              description: "No passkey was found for this account on this device. Try using QR code login.",
+              variant: "default",
+            });
+            // Automatically show QR code option
+            setTimeout(() => onShowQR(), 1500);
+          } else {
+            toast({
+              title: "Authentication Error",
+              description: `${error.name}: ${error.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Login Error",
+            description: "Failed to authenticate. Your device might not be compatible.",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
       
       if (!credential) {
-        throw new Error("Failed to get credential");
+        toast({
+          title: "Authentication Failed",
+          description: "No credential was provided. Please try again.",
+          variant: "destructive",
+        });
+        return;
       }
       
       // Complete the login
-      const response = await completeLogin(email, credential);
-      const userData = await response.json();
-      
-      // Update user state
-      setUser(userData.user);
-      
-      toast({
-        title: "Success",
-        description: "Successfully authenticated",
-      });
-      
-      onSuccess();
+      try {
+        const response = await completeLogin(email, credential);
+        
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error("Server login error:", errorData);
+          toast({
+            title: "Authentication Failed",
+            description: "Server couldn't verify your passkey. Please try again later.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        const userData = await response.json();
+        
+        // Update user state
+        setUser(userData.user);
+        
+        toast({
+          title: "Success",
+          description: "Successfully authenticated",
+        });
+        
+        onSuccess();
+      } catch (error) {
+        console.error("Error completing login:", error);
+        toast({
+          title: "Login Error",
+          description: "Could not complete authentication. Please try again later.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
-      console.error("Error during login:", error);
+      console.error("Unexpected error during login:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to authenticate",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive",
       });
     } finally {
