@@ -189,14 +189,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Verify origin
-      const origin = getOrigin(req);
-      console.log(`Registration - Verifying origin: ${clientData.origin} against expected: ${origin}`);
-      if (clientData.origin !== origin) {
-        // In development mode, be more lenient with origin checks
-        console.warn(`Origin mismatch: ${clientData.origin} !== ${origin}`);
-        console.warn("This is likely due to development environment differences.");
-        // In production, you would want to fail here:
-        // return res.status(400).json({ message: "Origin mismatch" });
+      const expectedOrigin = WEBAUTHN_CONFIG.origin;
+      if (clientData.origin !== expectedOrigin) {
+        return res.status(400).json({ message: 'Origin mismatch' });
       }
       
       // Extract credential public key from attestation object
@@ -336,16 +331,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientDataJSON = base64URLToBuffer(credential.response.clientDataJSON).toString();
       const clientData = JSON.parse(clientDataJSON);
       
-      // Verify origin
-      const origin = getOrigin(req);
-      console.log(`Login - Verifying origin: ${clientData.origin} against expected: ${origin}`);
-      if (clientData.origin !== origin) {
-        // In development mode, be more lenient with origin checks
-        console.warn(`Origin mismatch: ${clientData.origin} !== ${origin}`);
-        console.warn("This is likely due to development environment differences.");
-        // In production, you would want to fail here:
-        // return res.status(400).json({ message: "Origin mismatch" });
+      // Verify challenge
+      if (clientData.challenge !== challenge.challenge) {
+        return res.status(400).json({ message: 'Challenge mismatch' });
       }
+      
       // Verify origin
       const expectedOrigin = WEBAUTHN_CONFIG.origin;
       if (clientData.origin !== expectedOrigin) {
