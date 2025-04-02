@@ -196,15 +196,192 @@ export class DatabaseStorage implements IStorage {
 // Import in-memory storage for development/testing
 import { MemStorage } from './memory-storage';
 
-// Try to use database storage first, fall back to in-memory if issues arise
-let storage: IStorage;
-try {
-  storage = new DatabaseStorage();
-  console.log("Using database storage");
-} catch (error) {
-  console.error("Database connection failed, falling back to in-memory storage:", error);
-  storage = new MemStorage();
-  console.log("Using in-memory storage");
+// Create a resilient storage class that tries database first, falls back to in-memory if needed
+class ResilientStorage implements IStorage {
+  private dbStorage: DatabaseStorage;
+  private memStorage: MemStorage;
+  private useMemoryFallback: boolean = false;
+
+  constructor() {
+    this.dbStorage = new DatabaseStorage();
+    this.memStorage = new MemStorage();
+    console.log("Initialized resilient storage with database primary and in-memory fallback");
+  }
+
+  private async withFallback<T>(dbOperation: () => Promise<T>, memOperation: () => Promise<T>): Promise<T> {
+    if (this.useMemoryFallback) {
+      return memOperation();
+    }
+
+    try {
+      return await dbOperation();
+    } catch (error) {
+      console.error("Database operation failed, falling back to in-memory:", error);
+      this.useMemoryFallback = true;
+      return memOperation();
+    }
+  }
+
+  // User methods
+  async getUser(id: number): Promise<User | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getUser(id),
+      () => this.memStorage.getUser(id)
+    );
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getUserByEmail(email),
+      () => this.memStorage.getUserByEmail(email)
+    );
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getUserByUsername(username),
+      () => this.memStorage.getUserByUsername(username)
+    );
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    return this.withFallback(
+      () => this.dbStorage.createUser(user),
+      () => this.memStorage.createUser(user)
+    );
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.updateUser(id, updates),
+      () => this.memStorage.updateUser(id, updates)
+    );
+  }
+
+  // Credential methods
+  async getCredential(id: number): Promise<Credential | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getCredential(id),
+      () => this.memStorage.getCredential(id)
+    );
+  }
+
+  async getCredentialByCredentialId(credentialId: string): Promise<Credential | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getCredentialByCredentialId(credentialId),
+      () => this.memStorage.getCredentialByCredentialId(credentialId)
+    );
+  }
+
+  async getCredentialsByUserId(userId: number): Promise<Credential[]> {
+    return this.withFallback(
+      () => this.dbStorage.getCredentialsByUserId(userId),
+      () => this.memStorage.getCredentialsByUserId(userId)
+    );
+  }
+
+  async createCredential(credential: InsertCredential): Promise<Credential> {
+    return this.withFallback(
+      () => this.dbStorage.createCredential(credential),
+      () => this.memStorage.createCredential(credential)
+    );
+  }
+
+  async updateCredential(id: number, updates: Partial<Credential>): Promise<Credential | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.updateCredential(id, updates),
+      () => this.memStorage.updateCredential(id, updates)
+    );
+  }
+
+  // Challenge methods
+  async getChallenge(id: number): Promise<Challenge | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getChallenge(id),
+      () => this.memStorage.getChallenge(id)
+    );
+  }
+
+  async getChallengeByChallenge(challenge: string): Promise<Challenge | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getChallengeByChallenge(challenge),
+      () => this.memStorage.getChallengeByChallenge(challenge)
+    );
+  }
+
+  async getChallengesByUserId(userId: number): Promise<Challenge[]> {
+    return this.withFallback(
+      () => this.dbStorage.getChallengesByUserId(userId),
+      () => this.memStorage.getChallengesByUserId(userId)
+    );
+  }
+
+  async createChallenge(challenge: InsertChallenge): Promise<Challenge> {
+    return this.withFallback(
+      () => this.dbStorage.createChallenge(challenge),
+      () => this.memStorage.createChallenge(challenge)
+    );
+  }
+
+  async updateChallenge(id: number, updates: Partial<Challenge>): Promise<Challenge | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.updateChallenge(id, updates),
+      () => this.memStorage.updateChallenge(id, updates)
+    );
+  }
+
+  async deleteChallenge(id: number): Promise<boolean> {
+    return this.withFallback(
+      () => this.dbStorage.deleteChallenge(id),
+      () => this.memStorage.deleteChallenge(id)
+    );
+  }
+
+  async deleteExpiredChallenges(): Promise<number> {
+    return this.withFallback(
+      () => this.dbStorage.deleteExpiredChallenges(),
+      () => this.memStorage.deleteExpiredChallenges()
+    );
+  }
+
+  // SavedPassword methods
+  async getSavedPassword(id: number): Promise<SavedPassword | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.getSavedPassword(id),
+      () => this.memStorage.getSavedPassword(id)
+    );
+  }
+
+  async getSavedPasswordsByUserId(userId: number): Promise<SavedPassword[]> {
+    return this.withFallback(
+      () => this.dbStorage.getSavedPasswordsByUserId(userId),
+      () => this.memStorage.getSavedPasswordsByUserId(userId)
+    );
+  }
+
+  async createSavedPassword(savedPassword: InsertSavedPassword): Promise<SavedPassword> {
+    return this.withFallback(
+      () => this.dbStorage.createSavedPassword(savedPassword),
+      () => this.memStorage.createSavedPassword(savedPassword)
+    );
+  }
+
+  async updateSavedPassword(id: number, updates: Partial<SavedPassword>): Promise<SavedPassword | undefined> {
+    return this.withFallback(
+      () => this.dbStorage.updateSavedPassword(id, updates),
+      () => this.memStorage.updateSavedPassword(id, updates)
+    );
+  }
+
+  async deleteSavedPassword(id: number): Promise<boolean> {
+    return this.withFallback(
+      () => this.dbStorage.deleteSavedPassword(id),
+      () => this.memStorage.deleteSavedPassword(id)
+    );
+  }
 }
+
+// Initialize storage with resilient implementation
+const storage = new ResilientStorage();
 
 export { storage };
