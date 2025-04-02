@@ -1,0 +1,58 @@
+Error handling response: TypeError: Cannot read properties of undefined (reading 'length')
+    at chrome-extension://gbdjcgalliefpinpmggefbloehmmknca/data/content/element-to-block.js:1:7833Understand this errorAI
+queryClient.ts:27 
+            
+            
+           POST https://c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/api/auth/check-user 400 (Bad Request)
+apiRequest @ queryClient.ts:27
+mutationFn @ EmailInputScreen.tsx:37
+fn @ @tanstack_react-query.js?v=0e87b28b:1189
+run @ @tanstack_react-query.js?v=0e87b28b:494
+start @ @tanstack_react-query.js?v=0e87b28b:536
+execute @ @tanstack_react-query.js?v=0e87b28b:1225
+await in execute
+mutate @ @tanstack_react-query.js?v=0e87b28b:2630
+(anonymous) @ @tanstack_react-query.js?v=0e87b28b:3295
+onSubmit @ EmailInputScreen.tsx:83
+(anonymous) @ chunk-RBMNEPGM.js?v=0e87b28b:1675
+await in (anonymous)
+callCallback2 @ chunk-WERSD76P.js?v=0e87b28b:3674
+invokeGuardedCallbackDev @ chunk-WERSD76P.js?v=0e87b28b:3699
+invokeGuardedCallback @ chunk-WERSD76P.js?v=0e87b28b:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-WERSD76P.js?v=0e87b28b:3736
+executeDispatch @ chunk-WERSD76P.js?v=0e87b28b:7014
+processDispatchQueueItemsInOrder @ chunk-WERSD76P.js?v=0e87b28b:7034
+processDispatchQueue @ chunk-WERSD76P.js?v=0e87b28b:7043
+dispatchEventsForPlugins @ chunk-WERSD76P.js?v=0e87b28b:7051
+(anonymous) @ chunk-WERSD76P.js?v=0e87b28b:7174
+batchedUpdates$1 @ chunk-WERSD76P.js?v=0e87b28b:18913
+batchedUpdates @ chunk-WERSD76P.js?v=0e87b28b:3579
+dispatchEventForPluginEventSystem @ chunk-WERSD76P.js?v=0e87b28b:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-WERSD76P.js?v=0e87b28b:5478
+dispatchEvent @ chunk-WERSD76P.js?v=0e87b28b:5472
+dispatchDiscreteEvent @ chunk-WERSD76P.js?v=0e87b28b:5449Understand this errorAI
+queryClient.ts:27 
+            
+            
+           POST https://c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/api/auth/register/start 400 (Bad Request)
+apiRequest @ queryClient.ts:27
+startRegistration @ webAuthn.ts:12
+handleCreatePasskey @ PasskeyCreationScreen.tsx:54
+callCallback2 @ chunk-WERSD76P.js?v=0e87b28b:3674
+invokeGuardedCallbackDev @ chunk-WERSD76P.js?v=0e87b28b:3699
+invokeGuardedCallback @ chunk-WERSD76P.js?v=0e87b28b:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-WERSD76P.js?v=0e87b28b:3736
+executeDispatch @ chunk-WERSD76P.js?v=0e87b28b:7014
+processDispatchQueueItemsInOrder @ chunk-WERSD76P.js?v=0e87b28b:7034
+processDispatchQueue @ chunk-WERSD76P.js?v=0e87b28b:7043
+dispatchEventsForPlugins @ chunk-WERSD76P.js?v=0e87b28b:7051
+(anonymous) @ chunk-WERSD76P.js?v=0e87b28b:7174
+batchedUpdates$1 @ chunk-WERSD76P.js?v=0e87b28b:18913
+batchedUpdates @ chunk-WERSD76P.js?v=0e87b28b:3579
+dispatchEventForPluginEventSystem @ chunk-WERSD76P.js?v=0e87b28b:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-WERSD76P.js?v=0e87b28b:5478
+dispatchEvent @ chunk-WERSD76P.js?v=0e87b28b:5472
+dispatchDiscreteEvent @ chunk-WERSD76P.js?v=0e87b28b:5449Understand this errorAI
+PasskeyCreationScreen.tsx:56 Error starting registration: TypeError: Failed to execute 'json' on 'Response': body stream already read
+    at startRegistration (webAuthn.ts:13:31)
+    at async handleCreatePasskey (

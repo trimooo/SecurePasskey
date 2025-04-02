@@ -6,40 +6,55 @@ let currentChallenge: string | null = null;
 
 // Start WebAuthn registration
 export async function startRegistration(email: string): Promise<PublicKeyCredentialCreationOptions> {
-  // Clear any existing challenge state
-  currentChallenge = null;
-  
-  const response = await apiRequest('POST', '/api/auth/register/start', { email });
-  const data = await response.json();
-  
-  // Log the received data for debugging
-  console.log("Received registration options:", JSON.stringify(data, null, 2));
-  
-  // Save the original base64 challenge for verification later
-  currentChallenge = data.challenge;
-  console.log("Saved current challenge:", currentChallenge);
-  
-  // Convert base64URL-encoded values to ArrayBuffer as required by WebAuthn API
-  data.challenge = base64URLStringToBuffer(data.challenge);
-  data.user.id = base64URLStringToBuffer(data.user.id);
-  
-  if (data.excludeCredentials) {
-    data.excludeCredentials = data.excludeCredentials.map((credential: any) => ({
-      ...credential,
-      id: base64URLStringToBuffer(credential.id),
-    }));
-  }
-  
-  // Also store the challenge in session storage as a backup
   try {
-    if (currentChallenge) {
-      sessionStorage.setItem('webauthn_challenge', currentChallenge);
+    // Clear any existing challenge state
+    currentChallenge = null;
+    
+    const response = await apiRequest('POST', '/api/auth/register/start', { email });
+    
+    // Check if response is ok before attempting to read the body
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Registration start failed: ${response.status} ${errorText}`);
     }
-  } catch (err) {
-    console.warn("Could not store challenge in session storage:", err);
+    
+    const data = await response.json();
+    
+    // Log the received data for debugging
+    console.log("Received registration options:", JSON.stringify(data, null, 2));
+    
+    // Save the original base64 challenge for verification later
+    currentChallenge = data.challenge;
+    console.log("Saved current challenge:", currentChallenge);
+    
+    // Convert base64URL-encoded values to ArrayBuffer as required by WebAuthn API
+    const formattedData = {
+      ...data,
+      challenge: base64URLStringToBuffer(data.challenge),
+      user: {
+        ...data.user,
+        id: base64URLStringToBuffer(data.user.id),
+      },
+      excludeCredentials: data.excludeCredentials ? data.excludeCredentials.map((credential: any) => ({
+        ...credential,
+        id: base64URLStringToBuffer(credential.id),
+      })) : undefined
+    };
+    
+    // Also store the challenge in session storage as a backup
+    try {
+      if (currentChallenge) {
+        sessionStorage.setItem('webauthn_challenge', currentChallenge);
+      }
+    } catch (err) {
+      console.warn("Could not store challenge in session storage:", err);
+    }
+    
+    return formattedData;
+  } catch (error) {
+    console.error("Error in startRegistration:", error);
+    throw error;
   }
-  
-  return data;
 }
 
 // Complete WebAuthn registration
@@ -89,36 +104,48 @@ export async function completeRegistration(email: string, credential: any) {
 
 // Start WebAuthn login
 export async function startLogin(email: string): Promise<PublicKeyCredentialRequestOptions> {
-  // Clear any existing challenge state
-  currentChallenge = null;
-  
-  const response = await apiRequest('POST', '/api/auth/login/start', { email });
-  const data = await response.json();
-  
-  // Save the original base64 challenge for verification later
-  currentChallenge = data.challenge;
-  console.log("Saved current login challenge:", currentChallenge);
-  
-  // Convert base64URL-encoded challenge to ArrayBuffer as required by WebAuthn API
-  data.challenge = base64URLStringToBuffer(data.challenge);
-  
-  if (data.allowCredentials) {
-    data.allowCredentials = data.allowCredentials.map((credential: any) => ({
-      ...credential,
-      id: base64URLStringToBuffer(credential.id),
-    }));
-  }
-  
-  // Also store the challenge in session storage as a backup
   try {
-    if (currentChallenge) {
-      sessionStorage.setItem('webauthn_login_challenge', currentChallenge);
+    // Clear any existing challenge state
+    currentChallenge = null;
+    
+    const response = await apiRequest('POST', '/api/auth/login/start', { email });
+    
+    // Check if response is ok before attempting to read the body
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Login start failed: ${response.status} ${errorText}`);
     }
-  } catch (err) {
-    console.warn("Could not store login challenge in session storage:", err);
+    
+    const data = await response.json();
+    
+    // Save the original base64 challenge for verification later
+    currentChallenge = data.challenge;
+    console.log("Saved current login challenge:", currentChallenge);
+    
+    // Convert base64URL-encoded challenge to ArrayBuffer as required by WebAuthn API
+    const formattedData = {
+      ...data,
+      challenge: base64URLStringToBuffer(data.challenge),
+      allowCredentials: data.allowCredentials ? data.allowCredentials.map((credential: any) => ({
+        ...credential,
+        id: base64URLStringToBuffer(credential.id),
+      })) : undefined
+    };
+    
+    // Also store the challenge in session storage as a backup
+    try {
+      if (currentChallenge) {
+        sessionStorage.setItem('webauthn_login_challenge', currentChallenge);
+      }
+    } catch (err) {
+      console.warn("Could not store login challenge in session storage:", err);
+    }
+    
+    return formattedData;
+  } catch (error) {
+    console.error("Error in startLogin:", error);
+    throw error;
   }
-  
-  return data;
 }
 
 // Complete WebAuthn login
@@ -168,12 +195,34 @@ export async function completeLogin(email: string, credential: any) {
 
 // Get QR code for login
 export async function getQRCodeChallenge(email: string) {
-  const response = await apiRequest('POST', '/api/auth/qrcode', { email });
-  return response.json();
+  try {
+    const response = await apiRequest('POST', '/api/auth/qrcode', { email });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`QR code generation failed: ${response.status} ${errorText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error generating QR code:", error);
+    throw error;
+  }
 }
 
 // Verify QR code challenge
 export async function verifyQRCode(challengeId: string) {
-  const response = await apiRequest('POST', '/api/auth/qrcode/verify', { challengeId });
-  return response.json();
+  try {
+    const response = await apiRequest('POST', '/api/auth/qrcode/verify', { challengeId });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`QR code verification failed: ${response.status} ${errorText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error verifying QR code:", error);
+    throw error;
+  }
 }
