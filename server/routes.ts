@@ -44,16 +44,30 @@ function getOrigin(req: Request): string {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Clean up expired challenges periodically
+  let cleanupRunning = false;
   setInterval(async () => {
+    // Prevent multiple cleanup operations from running concurrently
+    if (cleanupRunning) {
+      return;
+    }
+    
+    cleanupRunning = true;
     try {
       const deleted = await storage.deleteExpiredChallenges();
       if (deleted > 0) {
         console.log(`Deleted ${deleted} expired challenges`);
       }
     } catch (error) {
-      console.error('Error cleaning up challenges:', error);
+      // Don't log full error details for expected intermittent DB errors
+      if (error instanceof Error) {
+        console.warn(`Challenge cleanup skipped: ${error.message}`);
+      } else {
+        console.error('Error cleaning up challenges:', error);
+      }
+    } finally {
+      cleanupRunning = false;
     }
-  }, 60000); // Run every minute
+  }, 120000); // Run every 2 minutes instead
 
   // Health check endpoint
   app.get('/api/health', async (_req: Request, res: Response) => {
@@ -150,7 +164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete registration process
   app.post('/api/auth/register/complete', async (req: Request, res: Response) => {
     try {
-      const { email, credential } = z.object({
+      const { email, credential, expectedChallenge } = z.object({
         email: z.string().email(),
         credential: z.object({
           id: z.string(),
@@ -163,6 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           authenticatorAttachment: z.string().optional(),
           transports: z.array(z.string()).optional(),
         }),
+        expectedChallenge: z.string().nullable().optional(),
       }).parse(req.body);
       
       // Get user
@@ -173,7 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get active challenges for user
       const challenges = await storage.getChallengesByUserId(user.id);
-      const challenge = challenges.find(c => c.type === 'registration' && new Date(c.expiresAt) > new Date());
+      let challenge = challenges.find(c => c.type === 'registration' && new Date(c.expiresAt) > new Date());
       
       if (!challenge) {
         return res.status(400).json({ message: 'No active challenge found' });
@@ -183,13 +198,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientDataJSON = base64URLToBuffer(credential.response.clientDataJSON).toString();
       const clientData = JSON.parse(clientDataJSON);
       
-      // Verify challenge
+      // ============ Challenge Verification ============
+      // Log all challenges for debugging
       console.log('Client challenge:', clientData.challenge);
-      console.log('Server challenge:', challenge.challenge);
+      console.log('Server challenge from DB:', challenge.challenge);
+      
+      if (expectedChallenge) {
+        console.log('Client-provided expectedChallenge:', expectedChallenge);
+      }
+      
+      // Use the client-provided expected challenge if available
+      if (expectedChallenge && expectedChallenge !== challenge.challenge) {
+        // Check if there's another matching challenge
+        const matchingChallenge = challenges.find(c => 
+          c.type === 'registration' && 
+          c.challenge === expectedChallenge && 
+          new Date(c.expiresAt) > new Date()
+        );
+        
+        if (matchingChallenge) {
+          console.log('Found a matching challenge using expectedChallenge:', matchingChallenge.challenge);
+          challenge = matchingChallenge;
+        } else {
+          console.warn('Expected challenge provided but not found in active challenges');
+        }
+      }
       
       // Compare challenges with more flexibility for encoding issues
       if (clientData.challenge !== challenge.challenge) {
-        // Ensure both are base64url-encoded and try again
+        // Normalize both challenges for comparison
         try {
           const clientChallenge = clientData.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
           const serverChallenge = challenge.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -200,14 +237,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: 'Challenge mismatch',
               details: {
                 clientChallenge: clientData.challenge,
-                serverChallenge: challenge.challenge
+                serverChallenge: challenge.challenge,
+                expectedChallenge: expectedChallenge || 'not provided'
               }
             });
+          } else {
+            console.log('Challenge match after normalization');
           }
         } catch (error) {
           console.error('Error comparing challenges:', error);
           return res.status(400).json({ message: 'Challenge verification error' });
         }
+      } else {
+        console.log('Direct challenge match!');
       }
       
       // Verify origin
@@ -313,7 +355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete login process
   app.post('/api/auth/login/complete', async (req: Request, res: Response) => {
     try {
-      const { email, credential } = z.object({
+      const { email, credential, expectedChallenge } = z.object({
         email: z.string().email(),
         credential: z.object({
           id: z.string(),
@@ -327,6 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }),
           clientExtensionResults: z.record(z.any()),
         }),
+        expectedChallenge: z.string().nullable().optional(),
       }).parse(req.body);
       
       // Get user
@@ -348,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get active challenges for user
       const challenges = await storage.getChallengesByUserId(user.id);
-      const challenge = challenges.find(c => c.type === 'authentication' && new Date(c.expiresAt) > new Date());
+      let challenge = challenges.find(c => c.type === 'authentication' && new Date(c.expiresAt) > new Date());
       
       if (!challenge) {
         return res.status(400).json({ message: 'No active challenge found' });
@@ -368,13 +411,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // In production, you would want to fail here:
         // return res.status(400).json({ message: "Origin mismatch" });
       }
-      // Verify challenge
+      
+      // ============ Challenge Verification ============
+      // Log all challenges for debugging
       console.log('Client login challenge:', clientData.challenge);
-      console.log('Server login challenge:', challenge.challenge);
+      console.log('Server login challenge from DB:', challenge.challenge);
+      
+      if (expectedChallenge) {
+        console.log('Client-provided expected login challenge:', expectedChallenge);
+      }
+      
+      // Use the client-provided expected challenge if available
+      if (expectedChallenge && expectedChallenge !== challenge.challenge) {
+        // Check if there's another matching challenge
+        const matchingChallenge = challenges.find(c => 
+          c.type === 'authentication' && 
+          c.challenge === expectedChallenge && 
+          new Date(c.expiresAt) > new Date()
+        );
+        
+        if (matchingChallenge) {
+          console.log('Found a matching login challenge using expectedChallenge:', matchingChallenge.challenge);
+          challenge = matchingChallenge;
+        } else {
+          console.warn('Expected login challenge provided but not found in active challenges');
+        }
+      }
       
       // Compare challenges with more flexibility for encoding issues
       if (clientData.challenge !== challenge.challenge) {
-        // Ensure both are base64url-encoded and try again
+        // Normalize both challenges for comparison
         try {
           const clientChallenge = clientData.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
           const serverChallenge = challenge.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -385,14 +451,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: 'Challenge mismatch',
               details: {
                 clientChallenge: clientData.challenge,
-                serverChallenge: challenge.challenge
+                serverChallenge: challenge.challenge,
+                expectedChallenge: expectedChallenge || 'not provided'
               }
             });
+          } else {
+            console.log('Login challenge match after normalization');
           }
         } catch (error) {
           console.error('Error comparing login challenges:', error);
           return res.status(400).json({ message: 'Challenge verification error' });
         }
+      } else {
+        console.log('Direct login challenge match!');
       }
       
       // Verify authenticator data
