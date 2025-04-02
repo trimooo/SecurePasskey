@@ -114,29 +114,49 @@ export default function PasskeyCreationScreen({ onBack, onSuccess }: PasskeyCrea
       // Complete the registration
       try {
         const response = await completeRegistration(email, credential);
+        let responseData;
         
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error("Server registration error:", errorData);
+        try {
+          responseData = await response.json();
+          
+          if (!response.ok) {
+            console.error("Server registration error:", responseData);
+            toast({
+              title: "Registration Failed",
+              description: responseData.message || "The server couldn't complete registration. Please try again later.",
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          // Update user state
+          setUser(responseData.user);
+          
           toast({
-            title: "Registration Failed",
-            description: "The server couldn't complete registration. Please try again later.",
-            variant: "destructive",
+            title: "Success",
+            description: "Passkey created successfully",
           });
-          return;
+          
+          onSuccess();
+        } catch (jsonError) {
+          // If we can't parse JSON, try to get the text instead
+          try {
+            const errorText = await response.text();
+            console.error("Server registration error (text):", errorText);
+            toast({
+              title: "Registration Failed",
+              description: "The server couldn't complete registration. Please try again later.",
+              variant: "destructive",
+            });
+          } catch (textError) {
+            console.error("Error reading response:", textError);
+            toast({
+              title: "Registration Failed",
+              description: "The server couldn't complete registration. Please try again later.",
+              variant: "destructive",
+            });
+          }
         }
-        
-        const userData = await response.json();
-        
-        // Update user state
-        setUser(userData.user);
-        
-        toast({
-          title: "Success",
-          description: "Passkey created successfully",
-        });
-        
-        onSuccess();
       } catch (error) {
         console.error("Error completing registration:", error);
         toast({

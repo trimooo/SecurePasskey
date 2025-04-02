@@ -6,6 +6,9 @@ export async function startRegistration(email: string): Promise<PublicKeyCredent
   const response = await apiRequest('POST', '/api/auth/register/start', { email });
   const data = await response.json();
   
+  // Log the received data for debugging
+  console.log("Received registration options:", JSON.stringify(data, null, 2));
+  
   // Convert base64URL-encoded values to ArrayBuffer as required by WebAuthn API
   data.challenge = base64URLStringToBuffer(data.challenge);
   data.user.id = base64URLStringToBuffer(data.user.id);
@@ -15,6 +18,13 @@ export async function startRegistration(email: string): Promise<PublicKeyCredent
       ...credential,
       id: base64URLStringToBuffer(credential.id),
     }));
+  }
+  
+  // Store the challenge string in session storage to handle refresh cases
+  try {
+    sessionStorage.setItem('webauthn_challenge', data.challenge.toString());
+  } catch (err) {
+    console.warn("Could not store challenge in session storage:", err);
   }
   
   return data;

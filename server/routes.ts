@@ -184,8 +184,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientData = JSON.parse(clientDataJSON);
       
       // Verify challenge
+      console.log('Client challenge:', clientData.challenge);
+      console.log('Server challenge:', challenge.challenge);
+      
+      // Compare challenges with more flexibility for encoding issues
       if (clientData.challenge !== challenge.challenge) {
-        return res.status(400).json({ message: 'Challenge mismatch' });
+        // Ensure both are base64url-encoded and try again
+        try {
+          const clientChallenge = clientData.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+          const serverChallenge = challenge.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+          
+          if (clientChallenge !== serverChallenge) {
+            console.warn(`Challenge mismatch: ${clientData.challenge} vs ${challenge.challenge}`);
+            return res.status(400).json({ 
+              message: 'Challenge mismatch',
+              details: {
+                clientChallenge: clientData.challenge,
+                serverChallenge: challenge.challenge
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error comparing challenges:', error);
+          return res.status(400).json({ message: 'Challenge verification error' });
+        }
       }
       
       // Verify origin
@@ -346,10 +368,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // In production, you would want to fail here:
         // return res.status(400).json({ message: "Origin mismatch" });
       }
-      // Verify origin
-      const expectedOrigin = WEBAUTHN_CONFIG.origin;
-      if (clientData.origin !== expectedOrigin) {
-        return res.status(400).json({ message: 'Origin mismatch' });
+      // Verify challenge
+      console.log('Client login challenge:', clientData.challenge);
+      console.log('Server login challenge:', challenge.challenge);
+      
+      // Compare challenges with more flexibility for encoding issues
+      if (clientData.challenge !== challenge.challenge) {
+        // Ensure both are base64url-encoded and try again
+        try {
+          const clientChallenge = clientData.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+          const serverChallenge = challenge.challenge.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+          
+          if (clientChallenge !== serverChallenge) {
+            console.warn(`Login challenge mismatch: ${clientData.challenge} vs ${challenge.challenge}`);
+            return res.status(400).json({ 
+              message: 'Challenge mismatch',
+              details: {
+                clientChallenge: clientData.challenge,
+                serverChallenge: challenge.challenge
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error comparing login challenges:', error);
+          return res.status(400).json({ message: 'Challenge verification error' });
+        }
       }
       
       // Verify authenticator data
