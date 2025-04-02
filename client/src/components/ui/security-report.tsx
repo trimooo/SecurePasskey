@@ -21,11 +21,19 @@ interface SecurityReport {
 
 export const SecurityReport = () => {
   const [showReport, setShowReport] = useState(false);
+  const [authError, setAuthError] = useState(false);
 
-  const { data: report, isLoading, isError, refetch } = useQuery<SecurityReport>({
+  const { data: report, isLoading, isError, error, refetch } = useQuery<SecurityReport>({
     queryKey: ['/api/security-report'],
-    enabled: showReport,
+    enabled: showReport
   });
+
+  // Handle authentication errors
+  React.useEffect(() => {
+    if (error && 'status' in error && error.status === 401) {
+      setAuthError(true);
+    }
+  }, [error]);
 
   const handleGenerateReport = () => {
     setShowReport(true);
@@ -59,6 +67,18 @@ export const SecurityReport = () => {
         </div>
         <Progress value={45} className="w-full max-w-md" />
         <p className="text-sm text-gray-500">Analyzing your passwords...</p>
+      </div>
+    );
+  }
+
+  if (authError) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center p-8 space-y-4">
+        <AlertCircle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-xl font-semibold">Authentication Required</h2>
+        <p className="text-gray-500 text-center max-w-md">
+          You need to be logged in to generate a security report. Please log in first.
+        </p>
       </div>
     );
   }

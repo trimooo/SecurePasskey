@@ -66,7 +66,7 @@ export default function Home() {
   });
 
   // Filter passwords based on search term
-  const filteredPasswords = passwords.filter((password) => {
+  const filteredPasswords = passwords ? passwords.filter((password) => {
     const searchLower = searchTerm.toLowerCase();
     return (
       password.website.toLowerCase().includes(searchLower) ||
@@ -74,7 +74,7 @@ export default function Home() {
       (password.url && password.url.toLowerCase().includes(searchLower)) ||
       (password.notes && password.notes.toLowerCase().includes(searchLower))
     );
-  });
+  }) : [];
 
   const handleLogout = () => {
     logout();
