@@ -760,6 +760,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
     }
   });
+  
+  // Generate a security health report
+  app.get('/api/security-report', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      // Get all passwords for this user
+      const passwords = await storage.getSavedPasswordsByUserId(userId);
+      
+      // Empty report structure
+      const report = {
+        totalPasswords: passwords.length,
+        weakPasswords: [] as Array<{id: number, website: string, username: string, reason: string}>,
+        duplicatePasswords: [] as Array<{id: number, website: string, username: string, duplicateCount: number}>,
+        oldPasswords: [] as Array<{id: number, website: string, username: string, lastUpdated: Date}>,
+        reusedPasswords: [] as Array<{id: number, website: string, username: string, reusedCount: number}>,
+        overallScore: 0,
+        recommendations: [] as string[]
+      };
+      
+      // Find weak passwords (too short, common patterns, etc.)
+      passwords.forEach(pw => {
+        // Check password length
+        if (pw.password.length < 8) {
+          report.weakPasswords.push({
+            id: pw.id,
+            website: pw.website,
+            username: pw.username,
+            reason: 'Password is too short (less than 8 characters)'
+          });
+        }
+        
+        // Check for common password patterns (no numbers, all lowercase, etc.)
+        if (!/\d/.test(pw.password)) {
+          report.weakPasswords.push({
+            id: pw.id,
+            website: pw.website,
+            username: pw.username,
+            reason: 'Password does not contain any numbers'
+          });
+        }
+
+        if (!/[A-Z]/.test(pw.password)) {
+          report.weakPasswords.push({
+            id: pw.id,
+            website: pw.website,
+            username: pw.username,
+            reason: 'Password does not contain uppercase letters'
+          });
+        }
+
+        if (!/[^A-Za-z0-9]/.test(pw.password)) {
+          report.weakPasswords.push({
+            id: pw.id,
+            website: pw.website,
+            username: pw.username,
+            reason: 'Password does not contain special characters'
+          });
+        }
+      });
+      
+      // Find duplicate passwords (same password used on multiple sites)
+      const passwordMap = new Map<string, Array<{id: number, website: string, username: string}>>();
+      
+      passwords.forEach(pw => {
+        if (!passwordMap.has(pw.password)) {
+          passwordMap.set(pw.password, []);
+        }
+        passwordMap.get(pw.password)?.push({
+          id: pw.id,
+          website: pw.website,
+          username: pw.username
+        });
+      });
+      
+      // Add duplicate passwords to report
+      passwordMap.forEach((sites, password) => {
+        if (sites.length > 1) {
+          sites.forEach(site => {
+            report.duplicatePasswords.push({
+              id: site.id,
+              website: site.website,
+              username: site.username,
+              duplicateCount: sites.length
+            });
+          });
+        }
+      });
+      
+      // Check for old passwords (based on createdAt/updatedAt)
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      
+      passwords.forEach(pw => {
+        const lastUpdated = new Date(pw.updatedAt);
+        if (lastUpdated < threeMonthsAgo) {
+          report.oldPasswords.push({
+            id: pw.id,
+            website: pw.website,
+            username: pw.username,
+            lastUpdated: lastUpdated
+          });
+        }
+      });
+      
+      // Check for reused username/password combinations across different domains
+      const usernamePasswordMap = new Map<string, Array<{id: number, website: string, username: string}>>();
+      
+      passwords.forEach(pw => {
+        const key = `${pw.username}:${pw.password}`;
+        if (!usernamePasswordMap.has(key)) {
+          usernamePasswordMap.set(key, []);
+        }
+        usernamePasswordMap.get(key)?.push({
+          id: pw.id,
+          website: pw.website,
+          username: pw.username
+        });
+      });
+      
+      // Add reused username/password combinations to report
+      usernamePasswordMap.forEach((sites, combo) => {
+        if (sites.length > 1) {
+          sites.forEach(site => {
+            report.reusedPasswords.push({
+              id: site.id,
+              website: site.website,
+              username: site.username,
+              reusedCount: sites.length
+            });
+          });
+        }
+      });
+      
+      // Calculate overall score (100 is best, 0 is worst)
+      let score = 100;
+      
+      // Deduct points for weak passwords
+      score -= Math.min(50, report.weakPasswords.length * 5);
+      
+      // Deduct points for duplicate passwords
+      score -= Math.min(30, report.duplicatePasswords.length * 3);
+      
+      // Deduct points for old passwords
+      score -= Math.min(20, report.oldPasswords.length * 2);
+      
+      // Ensure the score doesn't go below 0
+      report.overallScore = Math.max(0, score);
+      
+      // Add recommendations based on findings
+      if (report.weakPasswords.length > 0) {
+        report.recommendations.push('Strengthen weak passwords by adding complexity (uppercase, numbers, symbols)');
+      }
+      
+      if (report.duplicatePasswords.length > 0) {
+        report.recommendations.push('Use unique passwords for each website to prevent multiple accounts being compromised');
+      }
+      
+      if (report.oldPasswords.length > 0) {
+        report.recommendations.push('Regularly update your passwords (at least every 3 months)');
+      }
+      
+      if (report.reusedPasswords.length > 0) {
+        report.recommendations.push('Avoid using the same username and password combination across different websites');
+      }
+      
+      if (passwords.length === 0) {
+        report.recommendations.push('Start saving your passwords in the password manager for better security');
+      }
+      
+      return res.json(report);
+    } catch (error) {
+      console.error('Error generating security report:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

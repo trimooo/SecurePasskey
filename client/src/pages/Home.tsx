@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, ShieldCheck, X, LogOut } from "lucide-react";
+import { Plus, Search, ShieldCheck, X, LogOut, ShieldAlert } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { PasswordForm } from "@/components/ui/password-form";
 import { PasswordCard } from "@/components/ui/password-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SecurityReport } from "@/components/ui/security-report";
 import { apiRequest } from "@/lib/queryClient";
 import { SavedPassword } from "@shared/schema";
 
@@ -154,10 +155,16 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <TabsList className="h-9 bg-gray-100 rounded-lg p-1">
               <TabsTrigger value="all" className="rounded-md px-3 py-1 data-[state=active]:bg-white">
+                <ShieldCheck className="h-4 w-4 mr-1 inline-block" />
                 All Passwords
               </TabsTrigger>
               <TabsTrigger value="recent" className="rounded-md px-3 py-1 data-[state=active]:bg-white">
+                <Search className="h-4 w-4 mr-1 inline-block" />
                 Recently Used
+              </TabsTrigger>
+              <TabsTrigger value="security" className="rounded-md px-3 py-1 data-[state=active]:bg-white">
+                <ShieldAlert className="h-4 w-4 mr-1 inline-block" />
+                Security Report
               </TabsTrigger>
             </TabsList>
             
@@ -269,6 +276,12 @@ export default function Home() {
                 This feature will track your recently used passwords. 
                 Feature coming soon!
               </p>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="security" className="mt-0">
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <SecurityReport />
             </div>
           </TabsContent>
         </Tabs>
