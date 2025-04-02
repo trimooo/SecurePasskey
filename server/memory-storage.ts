@@ -4,7 +4,9 @@ import {
   Credential, 
   InsertCredential, 
   Challenge, 
-  InsertChallenge
+  InsertChallenge,
+  SavedPassword,
+  InsertSavedPassword
 } from "@shared/schema";
 import { IStorage } from "./storage";
 
@@ -13,9 +15,11 @@ export class MemStorage implements IStorage {
   private users: User[] = [];
   private credentials: Credential[] = [];
   private challenges: Challenge[] = [];
+  private savedPasswords: SavedPassword[] = [];
   private nextUserId = 1;
   private nextCredentialId = 1;
   private nextChallengeId = 1;
+  private nextSavedPasswordId = 1;
 
   // User methods
   async getUser(id: number): Promise<User | undefined> {
@@ -36,6 +40,8 @@ export class MemStorage implements IStorage {
       id,
       ...insertUser,
       registered: false,
+      verificationCode: null,
+      verificationExpiry: null,
     };
     this.users.push(user);
     return user;
@@ -140,5 +146,52 @@ export class MemStorage implements IStorage {
     const initialLength = this.challenges.length;
     this.challenges = this.challenges.filter(challenge => new Date(challenge.expiresAt) > now);
     return initialLength - this.challenges.length;
+  }
+
+  // SavedPassword methods
+  async getSavedPassword(id: number): Promise<SavedPassword | undefined> {
+    return this.savedPasswords.find(pwd => pwd.id === id);
+  }
+
+  async getSavedPasswordsByUserId(userId: number): Promise<SavedPassword[]> {
+    return this.savedPasswords.filter(pwd => pwd.userId === userId);
+  }
+
+  async createSavedPassword(insertSavedPassword: InsertSavedPassword): Promise<SavedPassword> {
+    const id = this.nextSavedPasswordId++;
+    const now = new Date();
+    const savedPassword: SavedPassword = {
+      id,
+      userId: insertSavedPassword.userId,
+      website: insertSavedPassword.website,
+      url: insertSavedPassword.url || null,
+      username: insertSavedPassword.username,
+      password: insertSavedPassword.password,
+      notes: insertSavedPassword.notes || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.savedPasswords.push(savedPassword);
+    return savedPassword;
+  }
+
+  async updateSavedPassword(id: number, updates: Partial<SavedPassword>): Promise<SavedPassword | undefined> {
+    const index = this.savedPasswords.findIndex(pwd => pwd.id === id);
+    if (index === -1) return undefined;
+    
+    const savedPassword = this.savedPasswords[index];
+    const updatedSavedPassword = { 
+      ...savedPassword, 
+      ...updates,
+      updatedAt: new Date() 
+    };
+    this.savedPasswords[index] = updatedSavedPassword;
+    return updatedSavedPassword;
+  }
+
+  async deleteSavedPassword(id: number): Promise<boolean> {
+    const initialLength = this.savedPasswords.length;
+    this.savedPasswords = this.savedPasswords.filter(pwd => pwd.id !== id);
+    return this.savedPasswords.length !== initialLength;
   }
 }

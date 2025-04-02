@@ -5,9 +5,12 @@ import {
   InsertCredential, 
   Challenge, 
   InsertChallenge,
+  SavedPassword,
+  InsertSavedPassword,
   users,
   credentials,
-  challenges
+  challenges,
+  savedPasswords
 } from "@shared/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { db } from "./db";
@@ -35,6 +38,13 @@ export interface IStorage {
   updateChallenge(id: number, updates: Partial<Challenge>): Promise<Challenge | undefined>;
   deleteChallenge(id: number): Promise<boolean>;
   deleteExpiredChallenges(): Promise<number>;
+  
+  // SavedPassword methods
+  getSavedPassword(id: number): Promise<SavedPassword | undefined>;
+  getSavedPasswordsByUserId(userId: number): Promise<SavedPassword[]>;
+  createSavedPassword(savedPassword: InsertSavedPassword): Promise<SavedPassword>;
+  updateSavedPassword(id: number, updates: Partial<SavedPassword>): Promise<SavedPassword | undefined>;
+  deleteSavedPassword(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -142,6 +152,44 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return result.length;
+  }
+
+  // SavedPassword methods
+  async getSavedPassword(id: number): Promise<SavedPassword | undefined> {
+    const result = await db.select().from(savedPasswords).where(eq(savedPasswords.id, id));
+    return result.length > 0 ? result[0] : undefined;
+  }
+
+  async getSavedPasswordsByUserId(userId: number): Promise<SavedPassword[]> {
+    return await db.select().from(savedPasswords).where(eq(savedPasswords.userId, userId));
+  }
+
+  async createSavedPassword(insertSavedPassword: InsertSavedPassword): Promise<SavedPassword> {
+    const now = new Date();
+    const result = await db.insert(savedPasswords).values({
+      ...insertSavedPassword,
+      createdAt: now,
+      updatedAt: now
+    }).returning();
+    return result[0];
+  }
+
+  async updateSavedPassword(id: number, updates: Partial<SavedPassword>): Promise<SavedPassword | undefined> {
+    const now = new Date();
+    const result = await db.update(savedPasswords)
+      .set({
+        ...updates,
+        updatedAt: now
+      })
+      .where(eq(savedPasswords.id, id))
+      .returning();
+    
+    return result.length > 0 ? result[0] : undefined;
+  }
+
+  async deleteSavedPassword(id: number): Promise<boolean> {
+    const result = await db.delete(savedPasswords).where(eq(savedPasswords.id, id)).returning();
+    return result.length > 0;
   }
 }
 

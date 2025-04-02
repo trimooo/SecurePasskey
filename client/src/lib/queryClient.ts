@@ -4,9 +4,11 @@ async function handleResponse(res: Response) {
   if (!res.ok) {
     console.warn(`API response not OK: ${res.status} ${res.statusText}`);
     try {
-      const errorText = await res.text();
+      // Clone the response before reading it
+      const clonedRes = res.clone();
+      const errorText = await clonedRes.text();
       console.warn('Error details:', errorText);
-      // Return the response without throwing to handle errors at the mutation level
+      // Return the original response to handle errors at the mutation level
       return res;
     } catch (e) {
       console.error('Failed to parse error response:', e);

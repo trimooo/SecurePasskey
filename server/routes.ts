@@ -1,4 +1,12 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request as ExpressRequest, Response } from "express";
+
+// Extend Request type to include session
+interface Request extends ExpressRequest {
+  session?: {
+    userId?: number;
+    [key: string]: any;
+  };
+}
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -14,7 +22,7 @@ import {
 } from "./webAuthn";
 import crypto from 'crypto';
 import { z } from "zod";
-import { webAuthnRegistrationInputSchema, webAuthnLoginInputSchema, insertUserSchema } from "@shared/schema";
+import { webAuthnRegistrationInputSchema, webAuthnLoginInputSchema, insertUserSchema, SavedPassword } from "@shared/schema";
 
 // Configuration for WebAuthn
 const WEBAUTHN_CONFIG = {
@@ -622,6 +630,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error verifying QR code:', error);
       return res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request' });
+    }
+  });
+
+  // Password manager APIs
+  
+  // Get saved passwords for a user
+  app.get('/api/passwords', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const passwords = await storage.getSavedPasswordsByUserId(userId);
+      return res.json(passwords);
+    } catch (error) {
+      console.error('Error fetching passwords:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+
+  // Add a new saved password
+  app.post('/api/passwords', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const { website, url, username, password, notes } = req.body;
+      
+      if (!website || !username || !password) {
+        return res.status(400).json({ message: 'Website, username, and password are required' });
+      }
+
+      const savedPassword = await storage.createSavedPassword({
+        userId,
+        website,
+        url: url || null,
+        username,
+        password,
+        notes: notes || null
+      });
+
+      return res.status(201).json(savedPassword);
+    } catch (error) {
+      console.error('Error creating password:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+
+  // Update a saved password
+  app.put('/api/passwords/:id', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const passwordId = parseInt(req.params.id);
+      if (isNaN(passwordId)) {
+        return res.status(400).json({ message: 'Invalid password ID' });
+      }
+
+      // Verify ownership
+      const existingPassword = await storage.getSavedPassword(passwordId);
+      if (!existingPassword) {
+        return res.status(404).json({ message: 'Password not found' });
+      }
+
+      if (existingPassword.userId !== userId) {
+        return res.status(403).json({ message: 'Not authorized to update this password' });
+      }
+
+      const { website, url, username, password, notes } = req.body;
+      const updates: Partial<SavedPassword> = {};
+
+      if (website !== undefined) updates.website = website;
+      if (url !== undefined) updates.url = url;
+      if (username !== undefined) updates.username = username;
+      if (password !== undefined) updates.password = password;
+      if (notes !== undefined) updates.notes = notes;
+
+      const updatedPassword = await storage.updateSavedPassword(passwordId, updates);
+      return res.json(updatedPassword);
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+
+  // Delete a saved password
+  app.delete('/api/passwords/:id', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
+
+      const passwordId = parseInt(req.params.id);
+      if (isNaN(passwordId)) {
+        return res.status(400).json({ message: 'Invalid password ID' });
+      }
+
+      // Verify ownership
+      const existingPassword = await storage.getSavedPassword(passwordId);
+      if (!existingPassword) {
+        return res.status(404).json({ message: 'Password not found' });
+      }
+
+      if (existingPassword.userId !== userId) {
+        return res.status(403).json({ message: 'Not authorized to delete this password' });
+      }
+
+      const success = await storage.deleteSavedPassword(passwordId);
+      if (success) {
+        return res.status(204).send();
+      } else {
+        return res.status(500).json({ message: 'Failed to delete password' });
+      }
+    } catch (error) {
+      console.error('Error deleting password:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
     }
   });
 

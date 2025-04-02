@@ -167,7 +167,7 @@ export default function QRCodeLoginScreen({ onBack, onSuccess }: QRCodeLoginScre
           toast({
             title: "Authentication Required",
             description: "This QR code requires you to be logged in on the scanning device.",
-            variant: "warning",
+            variant: "destructive",
           });
         } else if (failedAttempts >= maxFailedAttempts) {
           // If we've had too many failed attempts, stop polling

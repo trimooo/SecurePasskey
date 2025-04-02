@@ -9,6 +9,8 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   registered: boolean("registered").notNull().default(false),
+  verificationCode: text("verification_code"),
+  verificationExpiry: timestamp("verification_expiry"),
 });
 
 export const credentials = pgTable("credentials", {
@@ -31,10 +33,24 @@ export const challenges = pgTable("challenges", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// Password manager table
+export const savedPasswords = pgTable("saved_passwords", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  website: text("website").notNull(),
+  url: text("url"),
+  username: text("username").notNull(),
+  password: text("password").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Define relations after all tables are declared
 export const usersRelations = relations(users, ({ many }) => ({
   credentials: many(credentials),
   challenges: many(challenges),
+  savedPasswords: many(savedPasswords),
 }));
 
 export const credentialsRelations = relations(credentials, ({ one }) => ({
@@ -47,6 +63,13 @@ export const credentialsRelations = relations(credentials, ({ one }) => ({
 export const challengesRelations = relations(challenges, ({ one }) => ({
   user: one(users, {
     fields: [challenges.userId],
+    references: [users.id],
+  }),
+}));
+
+export const savedPasswordsRelations = relations(savedPasswords, ({ one }) => ({
+  user: one(users, {
+    fields: [savedPasswords.userId],
     references: [users.id],
   }),
 }));
@@ -76,6 +99,16 @@ export const insertChallengeSchema = createInsertSchema(challenges)
   });
 // Note: userId is already optional because it's not marked as notNull in the table definition
 
+export const insertSavedPasswordSchema = createInsertSchema(savedPasswords)
+  .pick({
+    userId: true,
+    website: true,
+    url: true,
+    username: true,
+    password: true,
+    notes: true,
+  });
+
 // Types
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -86,6 +119,9 @@ export type Credential = typeof credentials.$inferSelect;
 
 export type InsertChallenge = z.infer<typeof insertChallengeSchema>;
 export type Challenge = typeof challenges.$inferSelect;
+
+export type InsertSavedPassword = z.infer<typeof insertSavedPasswordSchema>;
+export type SavedPassword = typeof savedPasswords.$inferSelect;
 
 // Extended schemas
 export const webAuthnRegistrationInputSchema = z.object({

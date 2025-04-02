@@ -16,17 +16,25 @@ export async function startRegistration(email: string): Promise<PublicKeyCredent
     if (!response.ok) {
       let errorMessage;
       try {
-        // Try to parse as JSON first
-        const errorData = await response.json();
-        errorMessage = errorData.message || `Registration start failed with status ${response.status}`;
-      } catch (e) {
-        // If JSON parsing fails, try to get text
+        // Clone the response before reading it
+        const clonedResponse = response.clone();
         try {
-          errorMessage = await response.text();
-        } catch (textError) {
-          // If both fail, use a generic error
-          errorMessage = `Registration start failed with status ${response.status}`;
+          // Try to parse as JSON first
+          const errorData = await clonedResponse.json();
+          errorMessage = errorData.message || `Registration start failed with status ${response.status}`;
+        } catch (e) {
+          // If JSON parsing fails, try to get text from the original response
+          try {
+            const textResponse = response.clone();
+            errorMessage = await textResponse.text();
+          } catch (textError) {
+            // If both fail, use a generic error
+            errorMessage = `Registration start failed with status ${response.status}`;
+          }
         }
+      } catch (cloneError) {
+        // If cloning fails, use a generic error
+        errorMessage = `Registration start failed with status ${response.status}`;
       }
       throw new Error(errorMessage);
     }
@@ -117,17 +125,25 @@ export async function completeRegistration(email: string, credential: any) {
   if (!apiResponse.ok) {
     let errorMessage;
     try {
-      // Try to parse as JSON first
-      const errorData = await apiResponse.json();
-      errorMessage = errorData.message || `Registration complete failed with status ${apiResponse.status}`;
-    } catch (e) {
-      // If JSON parsing fails, try to get text
+      // Clone the response before reading it
+      const clonedResponse = apiResponse.clone();
       try {
-        errorMessage = await apiResponse.text();
-      } catch (textError) {
-        // If both fail, use a generic error
-        errorMessage = `Registration complete failed with status ${apiResponse.status}`;
+        // Try to parse as JSON first
+        const errorData = await clonedResponse.json();
+        errorMessage = errorData.message || `Registration complete failed with status ${apiResponse.status}`;
+      } catch (e) {
+        // If JSON parsing fails, try to get text from the original response
+        try {
+          const textResponse = apiResponse.clone();
+          errorMessage = await textResponse.text();
+        } catch (textError) {
+          // If both fail, use a generic error
+          errorMessage = `Registration complete failed with status ${apiResponse.status}`;
+        }
       }
+    } catch (cloneError) {
+      // If cloning fails, use a generic error
+      errorMessage = `Registration complete failed with status ${apiResponse.status}`;
     }
     throw new Error(errorMessage);
   }
@@ -147,17 +163,25 @@ export async function startLogin(email: string): Promise<PublicKeyCredentialRequ
     if (!response.ok) {
       let errorMessage;
       try {
-        // Try to parse as JSON first
-        const errorData = await response.json();
-        errorMessage = errorData.message || `Login start failed with status ${response.status}`;
-      } catch (e) {
-        // If JSON parsing fails, try to get text
+        // Clone the response before reading it
+        const clonedResponse = response.clone();
         try {
-          errorMessage = await response.text();
-        } catch (textError) {
-          // If both fail, use a generic error
-          errorMessage = `Login start failed with status ${response.status}`;
+          // Try to parse as JSON first
+          const errorData = await clonedResponse.json();
+          errorMessage = errorData.message || `Login start failed with status ${response.status}`;
+        } catch (e) {
+          // If JSON parsing fails, try to get text from the original response
+          try {
+            const textResponse = response.clone();
+            errorMessage = await textResponse.text();
+          } catch (textError) {
+            // If both fail, use a generic error
+            errorMessage = `Login start failed with status ${response.status}`;
+          }
         }
+      } catch (cloneError) {
+        // If cloning fails, use a generic error
+        errorMessage = `Login start failed with status ${response.status}`;
       }
       throw new Error(errorMessage);
     }
@@ -242,17 +266,25 @@ export async function completeLogin(email: string, credential: any) {
   if (!apiResponse.ok) {
     let errorMessage;
     try {
-      // Try to parse as JSON first
-      const errorData = await apiResponse.json();
-      errorMessage = errorData.message || `Login failed with status ${apiResponse.status}`;
-    } catch (e) {
-      // If JSON parsing fails, try to get text
+      // Clone the response before reading it
+      const clonedResponse = apiResponse.clone();
       try {
-        errorMessage = await apiResponse.text();
-      } catch (textError) {
-        // If both fail, use a generic error
-        errorMessage = `Login failed with status ${apiResponse.status}`;
+        // Try to parse as JSON first
+        const errorData = await clonedResponse.json();
+        errorMessage = errorData.message || `Login failed with status ${apiResponse.status}`;
+      } catch (e) {
+        // If JSON parsing fails, try to get text from the original response
+        try {
+          const textResponse = apiResponse.clone();
+          errorMessage = await textResponse.text();
+        } catch (textError) {
+          // If both fail, use a generic error
+          errorMessage = `Login failed with status ${apiResponse.status}`;
+        }
       }
+    } catch (cloneError) {
+      // If cloning fails, use a generic error
+      errorMessage = `Login failed with status ${apiResponse.status}`;
     }
     throw new Error(errorMessage);
   }
@@ -270,17 +302,25 @@ export async function getQRCodeChallenge(email?: string) {
     if (!response.ok) {
       let errorMessage;
       try {
-        // Try to parse as JSON first
-        const errorData = await response.json();
-        errorMessage = errorData.message || `QR code generation failed with status ${response.status}`;
-      } catch (e) {
-        // If JSON parsing fails, try to get text
+        // Clone the response before reading it
+        const clonedResponse = response.clone();
         try {
-          errorMessage = await response.text();
-        } catch (textError) {
-          // If both fail, use a generic error
-          errorMessage = `QR code generation failed with status ${response.status}`;
+          // Try to parse as JSON first
+          const errorData = await clonedResponse.json();
+          errorMessage = errorData.message || `QR code generation failed with status ${response.status}`;
+        } catch (e) {
+          // If JSON parsing fails, try to get text from the original response
+          try {
+            const textResponse = response.clone();
+            errorMessage = await textResponse.text();
+          } catch (textError) {
+            // If both fail, use a generic error
+            errorMessage = `QR code generation failed with status ${response.status}`;
+          }
         }
+      } catch (cloneError) {
+        // If cloning fails, use a generic error
+        errorMessage = `QR code generation failed with status ${response.status}`;
       }
       throw new Error(errorMessage);
     }
@@ -300,17 +340,25 @@ export async function verifyQRCode(challengeId: string) {
     if (!response.ok) {
       let errorMessage;
       try {
-        // Try to parse as JSON first
-        const errorData = await response.json();
-        errorMessage = errorData.message || `QR code verification failed with status ${response.status}`;
-      } catch (e) {
-        // If JSON parsing fails, try to get text
+        // Clone the response before reading it
+        const clonedResponse = response.clone();
         try {
-          errorMessage = await response.text();
-        } catch (textError) {
-          // If both fail, use a generic error
-          errorMessage = `QR code verification failed with status ${response.status}`;
+          // Try to parse as JSON first
+          const errorData = await clonedResponse.json();
+          errorMessage = errorData.message || `QR code verification failed with status ${response.status}`;
+        } catch (e) {
+          // If JSON parsing fails, try to get text from the original response
+          try {
+            const textResponse = response.clone();
+            errorMessage = await textResponse.text();
+          } catch (textError) {
+            // If both fail, use a generic error
+            errorMessage = `QR code verification failed with status ${response.status}`;
+          }
         }
+      } catch (cloneError) {
+        // If cloning fails, use a generic error
+        errorMessage = `QR code verification failed with status ${response.status}`;
       }
       throw new Error(errorMessage);
     }
