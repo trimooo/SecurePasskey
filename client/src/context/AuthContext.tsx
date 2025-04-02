@@ -9,13 +9,46 @@ type LoginData = {
   password: string;
 };
 
+type MfaVerifyData = {
+  userId: number;
+  code: string;
+  mfaType: 'totp' | 'email' | 'sms' | 'recovery';
+};
+
+type MfaSetupData = {
+  type: 'totp' | 'email' | 'sms';
+};
+
+type MfaEnableData = {
+  type: 'totp' | 'email' | 'sms';
+  code: string;
+  secret?: string;
+};
+
+type MfaDisableData = {
+  password: string;
+};
+
+type MfaResponse = {
+  requiresMfa: boolean;
+  mfaType: string;
+  userId: number;
+  verificationCode?: string; // Only for development
+  expiresAt?: string;
+  message: string;
+};
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: UseMutationResult<User, Error, LoginData>;
+  loginMutation: UseMutationResult<User | MfaResponse, Error, LoginData>;
   registerMutation: UseMutationResult<User, Error, InsertUser>;
   logoutMutation: UseMutationResult<void, Error, void>;
+  verifyMfaMutation: UseMutationResult<User, Error, MfaVerifyData>;
+  setupMfaMutation: UseMutationResult<any, Error, MfaSetupData>;
+  enableMfaMutation: UseMutationResult<User, Error, MfaEnableData>;
+  disableMfaMutation: UseMutationResult<User, Error, MfaDisableData>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -45,13 +78,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [user, isLoading, error]);
 
-  const loginMutation = useMutation<User, Error, LoginData>({
+  const loginMutation = useMutation<User | MfaResponse, Error, LoginData>({
     mutationFn: async (credentials) => {
       console.log("Login attempt with:", credentials.username);
       const response = await apiRequest("POST", "/api/login", credentials);
       return await response.json();
     },
-    onSuccess: (userData) => {
+    onSuccess: (data) => {
+      // Check if response indicates MFA is required
+      if (data && 'requiresMfa' in data && data.requiresMfa) {
+        console.log("MFA required for login:", data.mfaType);
+        toast({
+          title: "MFA Verification Required",
+          description: data.message || `Please verify with your ${data.mfaType} authentication.`,
+        });
+        // The MFA response data will be available to the component through mutation.data
+        return;
+      }
+      
+      // Regular successful login
+      const userData = data as User;
       console.log("Login successful:", userData);
       queryClient.setQueryData(['/api/user'], userData);
       refetch(); // Ensure we have fresh user data
@@ -118,6 +164,108 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+  
+  // MFA verify mutation (used when user needs to input MFA code during login)
+  const verifyMfaMutation = useMutation<User, Error, MfaVerifyData>({
+    mutationFn: async (verifyData) => {
+      console.log("MFA verify attempt for user:", verifyData.userId);
+      const response = await apiRequest("POST", "/api/mfa/verify", verifyData);
+      return await response.json();
+    },
+    onSuccess: (userData) => {
+      console.log("MFA verification successful");
+      queryClient.setQueryData(['/api/user'], userData);
+      refetch(); // Ensure we have fresh user data
+      toast({
+        title: "Verification successful",
+        description: "Authentication completed successfully.",
+      });
+    },
+    onError: (error) => {
+      console.error("MFA verification failed:", error);
+      toast({
+        title: "Verification failed",
+        description: error.message || 'Invalid verification code',
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // MFA setup mutation (used to initiate MFA setup)
+  const setupMfaMutation = useMutation<any, Error, MfaSetupData>({
+    mutationFn: async (setupData) => {
+      console.log("MFA setup attempt for type:", setupData.type);
+      const response = await apiRequest("POST", "/api/mfa/setup", setupData);
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      console.log("MFA setup initiated successfully");
+      toast({
+        title: "MFA Setup",
+        description: "Please complete the verification process to enable MFA",
+      });
+    },
+    onError: (error) => {
+      console.error("MFA setup failed:", error);
+      toast({
+        title: "MFA setup failed",
+        description: error.message || 'An error occurred during setup',
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // MFA enable mutation (used to complete MFA setup with verification)
+  const enableMfaMutation = useMutation<User, Error, MfaEnableData>({
+    mutationFn: async (enableData) => {
+      console.log("MFA enable attempt");
+      const response = await apiRequest("POST", "/api/mfa/enable", enableData);
+      return await response.json();
+    },
+    onSuccess: (userData) => {
+      console.log("MFA enabled successfully");
+      queryClient.setQueryData(['/api/user'], userData);
+      refetch(); // Ensure we have fresh user data
+      toast({
+        title: "MFA Enabled",
+        description: "Multi-factor authentication has been enabled for your account.",
+      });
+    },
+    onError: (error) => {
+      console.error("MFA enable failed:", error);
+      toast({
+        title: "Failed to enable MFA",
+        description: error.message || 'Verification failed',
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // MFA disable mutation
+  const disableMfaMutation = useMutation<User, Error, MfaDisableData>({
+    mutationFn: async (disableData) => {
+      console.log("MFA disable attempt");
+      const response = await apiRequest("POST", "/api/mfa/disable", disableData);
+      return await response.json();
+    },
+    onSuccess: (userData) => {
+      console.log("MFA disabled successfully");
+      queryClient.setQueryData(['/api/user'], userData);
+      refetch(); // Ensure we have fresh user data
+      toast({
+        title: "MFA Disabled",
+        description: "Multi-factor authentication has been disabled for your account.",
+      });
+    },
+    onError: (error) => {
+      console.error("MFA disable failed:", error);
+      toast({
+        title: "Failed to disable MFA",
+        description: error.message || 'Invalid password',
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <AuthContext.Provider
@@ -128,6 +276,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         registerMutation,
         logoutMutation,
+        verifyMfaMutation,
+        setupMfaMutation,
+        enableMfaMutation,
+        disableMfaMutation,
       }}
     >
       {children}

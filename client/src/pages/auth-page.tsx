@@ -9,16 +9,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KeySquare, ShieldAlert, UserRoundCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import MfaVerificationForm from '@/components/MfaVerificationForm';
+
+// Define MfaResponse type
+type MfaResponse = {
+  requiresMfa: boolean;
+  mfaType: string;
+  userId: number;
+  verificationCode?: string;
+  expiresAt?: string;
+  message: string;
+};
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
-  const { user, isLoading, error, loginMutation, registerMutation } = useAuth();
+  const { user, isLoading, error, loginMutation, registerMutation, verifyMfaMutation } = useAuth();
   const { toast } = useToast();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [activeTab, setActiveTab] = useState('login');
+  
+  // MFA verification state
+  const [showMfaVerification, setShowMfaVerification] = useState(false);
+  const [mfaData, setMfaData] = useState<MfaResponse | null>(null);
   
   // Debug - log auth state changes
   useEffect(() => {
@@ -36,6 +51,16 @@ export default function AuthPage() {
       setLocation('/');
     }
   }, [user, isLoading, loginMutation.isPending, registerMutation.isPending, error, setLocation]);
+  
+  // Check for MFA requirements after login attempt
+  useEffect(() => {
+    // Only run this when the login mutation has completed
+    if (!loginMutation.isPending && loginMutation.data && 'requiresMfa' in loginMutation.data) {
+      console.log('MFA required:', loginMutation.data);
+      setMfaData(loginMutation.data as MfaResponse);
+      setShowMfaVerification(true);
+    }
+  }, [loginMutation.isPending, loginMutation.data]);
 
   // Separate login handler
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -83,18 +108,37 @@ export default function AuthPage() {
     });
   };
 
+  // Handle successful MFA verification
+  const handleMfaSuccess = () => {
+    setShowMfaVerification(false);
+    setMfaData(null);
+  };
+  
+  // Handle MFA verification cancelation
+  const handleMfaCancel = () => {
+    setShowMfaVerification(false);
+    setMfaData(null);
+  };
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Auth form section */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-8">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold">Authentication</CardTitle>
-            <CardDescription>
-              Sign in to your account or create a new one
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        {showMfaVerification && mfaData ? (
+          <MfaVerificationForm 
+            mfaData={mfaData}
+            onSuccess={handleMfaSuccess}
+            onCancel={handleMfaCancel}
+          />
+        ) : (
+          <Card className="w-full max-w-md">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl font-bold">Authentication</CardTitle>
+              <CardDescription>
+                Sign in to your account or create a new one
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">Login</TabsTrigger>
@@ -220,6 +264,7 @@ export default function AuthPage() {
             Secure authentication with PassKeys
           </CardFooter>
         </Card>
+        )}
       </div>
       
       {/* Hero section */}

@@ -4,6 +4,7 @@ import { setupAuthRoutes } from "./auth";
 // Extend Request type to include user
 interface Request extends ExpressRequest {
   user?: any;
+  login?: (user: any, callback: (err?: any) => void) => void;
 }
 import { createServer, type Server } from "http";
 import { storage, IStorage } from "./storage";
@@ -928,6 +929,435 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json(report);
     } catch (error) {
       console.error('Error generating security report:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+
+  // MFA Setup and Verification Routes
+  
+  // Start MFA setup process - generates secret and QR code
+  app.post('/api/mfa/setup', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id;
+      const { type } = z.object({ type: z.enum(['totp', 'email', 'sms']) }).parse(req.body);
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Import inside the route to avoid circular dependencies
+      const { 
+        generateMfaSecret, 
+        generateOtpAuthUri, 
+        generateQrCodeDataUrl, 
+        generateRecoveryCodes,
+        generateEmailVerificationCode,
+        getVerificationCodeExpiry
+      } = await import('./mfa');
+      
+      let result: any = {};
+      
+      switch (type) {
+        case 'totp':
+          // Generate new secret
+          const secret = generateMfaSecret();
+          
+          // Generate URI for QR code
+          const serviceName = 'PassKey Auth';
+          const otpAuthUri = generateOtpAuthUri(user.username, serviceName, secret);
+          
+          // Generate QR code as data URL
+          const qrCodeUrl = await generateQrCodeDataUrl(otpAuthUri);
+          
+          // Generate recovery codes
+          const recoveryCodes = generateRecoveryCodes(10);
+          
+          // Store secret temporarily (not activating MFA yet)
+          await storage.updateUser(userId, {
+            mfaSecret: secret,
+            // Don't set mfaEnabled to true yet - will be done after verification
+          });
+          
+          // Add recovery codes to database
+          for (const code of recoveryCodes) {
+            await storage.createRecoveryCode({
+              userId,
+              code,
+              used: false
+            });
+          }
+          
+          result = {
+            secret,
+            qrCodeUrl,
+            recoveryCodes,
+            message: 'TOTP MFA setup initiated. Verify with a code to complete setup.'
+          };
+          break;
+          
+        case 'email':
+          // Generate verification code for email
+          const emailCode = generateEmailVerificationCode();
+          const emailExpiry = getVerificationCodeExpiry(10); // 10 minutes
+          
+          // Store the verification code
+          await storage.updateUser(userId, {
+            verificationCode: emailCode,
+            verificationExpiry: emailExpiry,
+            // Don't enable MFA yet
+          });
+          
+          // In a real app, we would send the code via email here
+          // For demo purposes, we're returning it in the response
+          result = {
+            verificationCode: emailCode, // In production, don't return this!
+            expiresAt: emailExpiry.toISOString(),
+            message: 'Email verification code generated. In production, this would be sent to your email.'
+          };
+          break;
+          
+        case 'sms':
+          // Similar to email but for SMS
+          // For now, require that user has phone number in profile
+          if (!user.phone) {
+            return res.status(400).json({ message: 'Phone number required for SMS MFA' });
+          }
+          
+          const smsCode = generateEmailVerificationCode(); // Reusing the same generator
+          const smsExpiry = getVerificationCodeExpiry(10);
+          
+          await storage.updateUser(userId, {
+            verificationCode: smsCode,
+            verificationExpiry: smsExpiry,
+          });
+          
+          // In a real app, we would send the SMS via a service like Twilio
+          result = {
+            verificationCode: smsCode, // In production, don't return this!
+            expiresAt: smsExpiry.toISOString(),
+            message: 'SMS verification code generated. In production, this would be sent to your phone.'
+          };
+          break;
+      }
+      
+      return res.json(result);
+    } catch (error) {
+      console.error('Error setting up MFA:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+  
+  // Verify and activate MFA
+  app.post('/api/mfa/verify', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id;
+      const { code, type } = z.object({ 
+        code: z.string(), 
+        type: z.enum(['totp', 'email', 'sms']) 
+      }).parse(req.body);
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Import inside the route to avoid circular dependencies
+      const { verifyOtpCode, isVerificationCodeExpired } = await import('./mfa');
+      
+      let verified = false;
+      
+      switch (type) {
+        case 'totp':
+          if (!user.mfaSecret) {
+            return res.status(400).json({ message: 'TOTP setup not initiated' });
+          }
+          
+          verified = verifyOtpCode(code, user.mfaSecret);
+          break;
+          
+        case 'email':
+        case 'sms':
+          if (!user.verificationCode || !user.verificationExpiry) {
+            return res.status(400).json({ 
+              message: `${type === 'email' ? 'Email' : 'SMS'} verification code not sent` 
+            });
+          }
+          
+          if (isVerificationCodeExpired(new Date(user.verificationExpiry))) {
+            return res.status(400).json({ message: 'Verification code expired' });
+          }
+          
+          verified = code === user.verificationCode;
+          break;
+      }
+      
+      if (!verified) {
+        return res.status(400).json({ message: 'Invalid verification code' });
+      }
+      
+      // Activate MFA
+      const updatedUser = await storage.updateUser(userId, {
+        mfaEnabled: true,
+        mfaType: type,
+        verificationCode: null, // Clear verification code after successful verification
+        verificationExpiry: null
+      });
+      
+      return res.json({ 
+        success: true, 
+        mfaEnabled: true,
+        mfaType: type,
+        message: 'MFA successfully activated'
+      });
+    } catch (error) {
+      console.error('Error verifying MFA:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+  
+  // Verify MFA during login
+  app.post('/api/mfa/authenticate', passwordRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { userId, code } = z.object({ 
+        userId: z.number(), 
+        code: z.string() 
+      }).parse(req.body);
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      if (!user.mfaEnabled) {
+        return res.status(400).json({ message: 'MFA not enabled for this user' });
+      }
+      
+      const { verifyOtpCode, isVerificationCodeExpired } = await import('./mfa');
+      
+      let verified = false;
+      
+      // Check if it's a recovery code
+      const recoveryCode = await storage.getRecoveryCodeByCode(code);
+      if (recoveryCode && recoveryCode.userId === userId && !recoveryCode.used) {
+        // Mark recovery code as used
+        await storage.updateRecoveryCode(recoveryCode.id, { 
+          used: true,
+          usedAt: new Date()
+        });
+        verified = true;
+      } else {
+        // Not a recovery code, check regular MFA
+        switch (user.mfaType) {
+          case 'totp':
+            if (user.mfaSecret) {
+              verified = verifyOtpCode(code, user.mfaSecret);
+            }
+            break;
+            
+          case 'email':
+          case 'sms':
+            if (user.verificationCode && user.verificationExpiry) {
+              if (!isVerificationCodeExpired(new Date(user.verificationExpiry))) {
+                verified = code === user.verificationCode;
+                
+                // Clear verification code after use
+                if (verified) {
+                  await storage.updateUser(userId, {
+                    verificationCode: null,
+                    verificationExpiry: null
+                  });
+                }
+              }
+            }
+            break;
+        }
+      }
+      
+      if (!verified) {
+        return res.status(401).json({ message: 'Invalid MFA code' });
+      }
+      
+      // Update last login time
+      await storage.updateUser(userId, {
+        lastLogin: new Date()
+      });
+      
+      // Set session directly
+      if (req.session) {
+        req.session.userId = user.id;
+      } else {
+        console.error('Session object missing in request');
+        return res.status(500).json({ message: 'Session error during login' });
+      }
+      return res.json(user);
+    } catch (error) {
+      console.error('Error authenticating MFA:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+  
+  // Disable MFA
+  app.post('/api/mfa/disable', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id;
+      const { code } = z.object({ code: z.string() }).parse(req.body);
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      if (!user.mfaEnabled) {
+        return res.status(400).json({ message: 'MFA not enabled' });
+      }
+      
+      const { verifyOtpCode } = await import('./mfa');
+      
+      // Verify current MFA before disabling
+      let verified = false;
+      
+      // Check if it's a recovery code
+      const recoveryCode = await storage.getRecoveryCodeByCode(code);
+      if (recoveryCode && recoveryCode.userId === userId && !recoveryCode.used) {
+        // Mark recovery code as used
+        await storage.updateRecoveryCode(recoveryCode.id, { 
+          used: true,
+          usedAt: new Date()
+        });
+        verified = true;
+      } else if (user.mfaType === 'totp' && user.mfaSecret) {
+        verified = verifyOtpCode(code, user.mfaSecret);
+      } else if ((user.mfaType === 'email' || user.mfaType === 'sms') && user.verificationCode) {
+        verified = code === user.verificationCode;
+      }
+      
+      if (!verified) {
+        return res.status(401).json({ message: 'Invalid verification code' });
+      }
+      
+      // Disable MFA
+      await storage.updateUser(userId, {
+        mfaEnabled: false,
+        mfaType: null,
+        mfaSecret: null,
+        verificationCode: null,
+        verificationExpiry: null
+      });
+      
+      // Delete all recovery codes
+      await storage.deleteAllRecoveryCodesByUserId(userId);
+      
+      return res.json({ 
+        success: true, 
+        message: 'MFA successfully disabled' 
+      });
+    } catch (error) {
+      console.error('Error disabling MFA:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+  
+  // Get new recovery codes
+  app.post('/api/mfa/recovery-codes/new', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id;
+      const { code } = z.object({ code: z.string() }).parse(req.body);
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      if (!user.mfaEnabled) {
+        return res.status(400).json({ message: 'MFA not enabled' });
+      }
+      
+      const { verifyOtpCode, generateRecoveryCodes } = await import('./mfa');
+      
+      // Verify current MFA before generating new codes
+      let verified = false;
+      
+      if (user.mfaType === 'totp' && user.mfaSecret) {
+        verified = verifyOtpCode(code, user.mfaSecret);
+      } else if ((user.mfaType === 'email' || user.mfaType === 'sms') && user.verificationCode) {
+        verified = code === user.verificationCode;
+      }
+      
+      if (!verified) {
+        return res.status(401).json({ message: 'Invalid verification code' });
+      }
+      
+      // Delete all existing recovery codes
+      await storage.deleteAllRecoveryCodesByUserId(userId);
+      
+      // Generate new recovery codes
+      const recoveryCodes = generateRecoveryCodes(10);
+      
+      // Add recovery codes to database
+      for (const code of recoveryCodes) {
+        await storage.createRecoveryCode({
+          userId,
+          code,
+          used: false
+        });
+      }
+      
+      return res.json({ 
+        recoveryCodes,
+        message: 'New recovery codes generated'
+      });
+    } catch (error) {
+      console.error('Error generating new recovery codes:', error);
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+  });
+  
+  // List recovery codes (verify MFA first)
+  app.post('/api/mfa/recovery-codes', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.id;
+      const { code } = z.object({ code: z.string() }).parse(req.body);
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      if (!user.mfaEnabled) {
+        return res.status(400).json({ message: 'MFA not enabled' });
+      }
+      
+      const { verifyOtpCode } = await import('./mfa');
+      
+      // Verify current MFA before showing recovery codes
+      let verified = false;
+      
+      if (user.mfaType === 'totp' && user.mfaSecret) {
+        verified = verifyOtpCode(code, user.mfaSecret);
+      } else if ((user.mfaType === 'email' || user.mfaType === 'sms') && user.verificationCode) {
+        verified = code === user.verificationCode;
+      }
+      
+      if (!verified) {
+        return res.status(401).json({ message: 'Invalid verification code' });
+      }
+      
+      // Get all recovery codes for user
+      const recoveryCodes = await storage.getRecoveryCodesByUserId(userId);
+      
+      // Format response to show which codes are used
+      const formattedCodes = recoveryCodes.map(rc => ({
+        code: rc.code,
+        used: rc.used,
+        usedAt: rc.usedAt
+      }));
+      
+      return res.json({ 
+        recoveryCodes: formattedCodes
+      });
+    } catch (error) {
+      console.error('Error fetching recovery codes:', error);
       return res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
     }
   });
