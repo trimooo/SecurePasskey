@@ -43,9 +43,23 @@ fi
 
 echo "Remote origin added successfully."
 
+# Initialize git if needed
+if [ ! -d ".git" ]; then
+  echo "Initializing git repository..."
+  git init
+  git add .
+  git commit -m "Initial commit"
+fi
+
+# Make sure we're on main branch
+if [ "$(git branch --show-current)" != "main" ]; then
+  echo "Switching to main branch..."
+  git branch -M main
+fi
+
 # Push to GitHub
 echo "Pushing code to GitHub..."
-git push -u origin main
+git push -u origin main --force
 
 if [ $? -ne 0 ]; then
   echo "Failed to push code to GitHub."

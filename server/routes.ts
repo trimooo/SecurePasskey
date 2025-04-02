@@ -8,6 +8,13 @@ interface Request extends ExpressRequest {
 import { createServer, type Server } from "http";
 import { storage, IStorage } from "./storage";
 import { 
+  authRateLimiter, 
+  authSpeedLimiter, 
+  webAuthnRateLimiter, 
+  passwordRateLimiter,
+  qrCodeRateLimiter
+} from "./middleware/security";
+import { 
   generateChallenge, 
   bufferToBase64URL, 
   base64URLToBuffer, 
@@ -98,7 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Check if user exists
-  app.post('/api/auth/check-user', async (req: Request, res: Response) => {
+  app.post('/api/auth/check-user', authRateLimiter, authSpeedLimiter, async (req: Request, res: Response) => {
     try {
       console.log('Check user request body:', req.body);
       const { email } = z.object({ email: z.string().email() }).parse(req.body);
@@ -114,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Start registration process
-  app.post('/api/auth/register/start', async (req: Request, res: Response) => {
+  app.post('/api/auth/register/start', authRateLimiter, webAuthnRateLimiter, async (req: Request, res: Response) => {
     try {
       const { email } = webAuthnRegistrationInputSchema.parse(req.body);
       
@@ -170,7 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Complete registration process
-  app.post('/api/auth/register/complete', async (req: Request, res: Response) => {
+  app.post('/api/auth/register/complete', authRateLimiter, webAuthnRateLimiter, async (req: Request, res: Response) => {
     try {
       const { email, credential, expectedChallenge } = z.object({
         email: z.string().email(),
@@ -304,7 +311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Start login process
-  app.post('/api/auth/login/start', async (req: Request, res: Response) => {
+  app.post('/api/auth/login/start', authRateLimiter, authSpeedLimiter, async (req: Request, res: Response) => {
     try {
       const { email } = webAuthnLoginInputSchema.parse(req.body);
       
@@ -362,7 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Complete login process
-  app.post('/api/auth/login/complete', async (req: Request, res: Response) => {
+  app.post('/api/auth/login/complete', authRateLimiter, authSpeedLimiter, webAuthnRateLimiter, async (req: Request, res: Response) => {
     try {
       const { email, credential, expectedChallenge } = z.object({
         email: z.string().email(),
@@ -524,7 +531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate QR code for login
-  app.post('/api/auth/qrcode', async (req: Request, res: Response) => {
+  app.post('/api/auth/qrcode', authRateLimiter, authSpeedLimiter, qrCodeRateLimiter, async (req: Request, res: Response) => {
     try {
       // Email is now optional - allowing anonymous QR codes (e.g. for login from another device)
       // A special case will handle actual user association during verification
@@ -580,7 +587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Verify QR code challenge
-  app.post('/api/auth/qrcode/verify', async (req: Request, res: Response) => {
+  app.post('/api/auth/qrcode/verify', authRateLimiter, authSpeedLimiter, qrCodeRateLimiter, async (req: Request, res: Response) => {
     try {
       const { challengeId } = z.object({ challengeId: z.string() }).parse(req.body);
       
@@ -654,7 +661,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add a new saved password
-  app.post('/api/passwords', requireAuth, async (req: Request, res: Response) => {
+  app.post('/api/passwords', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.id;
 
@@ -681,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a saved password
-  app.put('/api/passwords/:id', requireAuth, async (req: Request, res: Response) => {
+  app.put('/api/passwords/:id', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.id;
 
@@ -718,7 +725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a saved password
-  app.delete('/api/passwords/:id', requireAuth, async (req: Request, res: Response) => {
+  app.delete('/api/passwords/:id', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.id;
 
@@ -750,7 +757,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Generate a security health report
-  app.get('/api/security-report', requireAuth, async (req: Request, res: Response) => {
+  app.get('/api/security-report', requireAuth, passwordRateLimiter, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.id;
 

@@ -26,12 +26,13 @@ A modern, secure authentication system featuring passkey registration, QR code l
 
 - Node.js (v18+)
 - PostgreSQL database
+- Git
 
-### Installation
+### Local Development Setup
 
 1. Clone the repository
    ```
-   git clone https://github.com/trimooo/Auth-System.git
+   git clone https://github.com/[YOUR_USERNAME]/Auth-System.git
    cd Auth-System
    ```
 
@@ -45,16 +46,56 @@ A modern, secure authentication system featuring passkey registration, QR code l
    cp .env.example .env
    ```
 
-4. Update the `.env` file with your PostgreSQL database credentials
+4. Update the `.env` file with your PostgreSQL database credentials:
+   ```
+   DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/auth_db
+   PORT=5000
+   NODE_ENV=development
+   SESSION_SECRET=your_local_development_secret
+   ORIGIN=http://localhost:5000
+   ```
 
-5. Push the database schema
+5. Create a local PostgreSQL database:
+   ```
+   psql -U postgres
+   CREATE DATABASE auth_db;
+   \q
+   ```
+
+6. Push the database schema
    ```
    npm run db:push
    ```
 
-6. Start the development server
+7. Start the development server
    ```
    npm run dev
+   ```
+
+8. Open your browser and navigate to:
+   ```
+   http://localhost:5000
+   ```
+
+### VS Code Configuration
+
+For the best development experience in VS Code:
+
+1. Install recommended extensions:
+   - ESLint
+   - Prettier
+   - TypeScript and JavaScript Language Features
+   - Tailwind CSS IntelliSense
+
+2. Add the following settings to your VS Code workspace settings:
+   ```json
+   {
+     "editor.formatOnSave": true,
+     "editor.codeActionsOnSave": {
+       "source.fixAll.eslint": true
+     },
+     "typescript.tsdk": "node_modules/typescript/lib"
+   }
    ```
 
 ## Deployment

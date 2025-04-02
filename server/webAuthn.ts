@@ -28,7 +28,20 @@ export function generateQRCodeUrl(challengeId: string, origin: string): string {
 export function verifyOrigin(clientDataJSON: string, expectedOrigin: string): boolean {
   try {
     const clientData = JSON.parse(Buffer.from(base64URLToBuffer(clientDataJSON)).toString());
-    return clientData.origin === expectedOrigin;
+    
+    // Allow multiple possible origins for development
+    const allowedOrigins = [
+      expectedOrigin,
+      'http://localhost:5000',
+      'https://localhost:5000',
+    ];
+    
+    // If we're in a Replit environment, add the Replit URL pattern
+    if (process.env.REPL_ID) {
+      allowedOrigins.push(new URL(expectedOrigin).origin);
+    }
+    
+    return allowedOrigins.includes(clientData.origin);
   } catch (error) {
     console.error('Error verifying origin:', error);
     return false;

@@ -4,6 +4,11 @@ import { setupVite, serveStatic, log } from "./vite";
 import session from "express-session";
 import crypto from "crypto";
 import createMemoryStore from "memorystore";
+import { 
+  globalRateLimiter, 
+  detectSuspiciousRequests,
+  logRateLimitHit
+} from "./middleware/security";
 
 // Create in-memory session store for simplicity
 const MemoryStore = createMemoryStore(session);
@@ -15,8 +20,22 @@ const sessionStore = new MemoryStore({
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
 const app = express();
+
+// Enable trust proxy - required for rate limiting to work properly
+// when behind a reverse proxy or in Replit environment
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Apply global rate limiting to all requests
+app.use(globalRateLimiter);
+
+// Add detection of suspicious requests
+app.use(detectSuspiciousRequests);
+
+// Log rate limit hits for monitoring
+app.use(logRateLimitHit);
 
 // Set up session middleware
 app.use(session({
