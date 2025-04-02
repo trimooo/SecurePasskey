@@ -46,6 +46,7 @@ export default function EmailInputScreen({ onNext }: EmailInputScreenProps) {
         description: error instanceof Error ? error.message : "Failed to check user status",
         variant: "destructive",
       });
+      console.error("Error checking user:", error);
     },
     onSettled: () => {
       setIsLoading(false);

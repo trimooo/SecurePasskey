@@ -76,9 +76,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check if user exists
   app.post('/api/auth/check-user', async (req: Request, res: Response) => {
     try {
+      console.log('Check user request body:', req.body);
       const { email } = z.object({ email: z.string().email() }).parse(req.body);
+      console.log('Parsed email:', email);
       
       const user = await storage.getUserByEmail(email);
+      console.log('User found:', user);
       return res.json({ exists: !!user && user.registered });
     } catch (error) {
       console.error('Error checking user:', error);
