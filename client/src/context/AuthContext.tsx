@@ -42,6 +42,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   error: Error | null;
+  isAuthenticated: boolean;
+  email: string | null;
+  setEmail: (email: string | null) => void;
+  setUser: (user: User | null) => void;
   loginMutation: UseMutationResult<User | MfaResponse, Error, LoginData>;
   registerMutation: UseMutationResult<User, Error, InsertUser>;
   logoutMutation: UseMutationResult<void, Error, void>;
@@ -55,6 +59,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const [email, setEmail] = useState<string | null>(null);
   
   const { 
     data: user, 
@@ -273,6 +278,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: user || null,
         isLoading,
         error: error as Error | null,
+        isAuthenticated: !!user,
+        email,
+        setEmail,
+        setUser: (newUser: User | null) => queryClient.setQueryData(['/api/user'], newUser),
         loginMutation,
         registerMutation,
         logoutMutation,
