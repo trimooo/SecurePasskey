@@ -282,7 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         email,
         setEmail,
-        setUser: (newUser: User | null) => queryClient.setQueryData(['/api/user'], newUser),
+        setUser: (newUser: User | null) => queryClient.setQueryData<User | null>(['/api/user'], newUser),
         loginMutation,
         registerMutation,
         logoutMutation,
