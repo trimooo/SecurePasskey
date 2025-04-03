@@ -1,0 +1,33 @@
+Uncaught ReferenceError: useState is not defined
+    at AuthProvider (AuthContext.tsx:62:29)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=4f633e0c:11548:26)
+    at mountIndeterminateComponent (chunk-RPCDYKBN.js?v=4f633e0c:14926:21)
+    at beginWork (chunk-RPCDYKBN.js?v=4f633e0c:15914:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=4f633e0c:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=4f633e0c:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=4f633e0c:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=4f633e0c:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=4f633e0c:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=4f633e0c:19137:13)Understand this error
+chunk-RPCDYKBN.js?v=4f633e0c:14032 The above error occurred in the <AuthProvider> component:
+
+    at AuthProvider (https://c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/src/context/AuthContext.tsx:23:32)
+    at QueryClientProvider (https://c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=4f633e0c:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+logCapturedError @ chunk-RPCDYKBN.js?v=4f633e0c:14032Understand this error
+chunk-RPCDYKBN.js?v=4f633e0c:19413 Uncaught ReferenceError: useState is not defined
+    at AuthProvider (AuthContext.tsx:62:29)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=4f633e0c:11548:26)
+    at mountIndeterminateComponent (chunk-RPCDYKBN.js?v=4f633e0c:14926:21)
+    at beginWork (chunk-RPCDYKBN.js?v=4f633e0c:15914:22)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=4f633e0c:19753:22)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=4f633e0c:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=4f633e0c:19137:13)
+    at renderRootSync (chunk-RPCDYKBN.js?v=4f633e0c:19116:15)
+    at recoverFromConcurrentError (chunk-RPCDYKBN.js?v=4f633e0c:18736:28)
+    at performConcurrentWorkOnRoot (chunk-RPCDYKBN.js?v=4f633e0c:18684:30)Understand this error
+c79e0b9d-cd0f-4e66-b1aa-d8a695e51209-00-xqtcdgfb36rg.picard.replit.dev/:1 Error handling response: TypeError: Cannot read properties of undefined (reading 'length')
+    at chrome-extension://gbdjcgalliefpinpmggefbloehmmknca/data/content/element-to
