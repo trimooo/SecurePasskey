@@ -1,8 +1,9 @@
-import { createContext, ReactNode, useContext, useEffect } from "react";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { useQuery, useMutation, UseMutationResult } from "@tanstack/react-query";
 import { User, InsertUser } from "@shared/schema";
 import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { OTPInput, OTPInputContext } from "input-otp";
 
 type LoginData = {
   username: string;
@@ -60,7 +61,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const [email, setEmail] = useState<string | null>(null);
-  
+
   const { 
     data: user, 
     isLoading, 
@@ -100,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // The MFA response data will be available to the component through mutation.data
         return;
       }
-      
+
       // Regular successful login
       const userData = data as User;
       console.log("Login successful:", userData);
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
-  
+
   // MFA verify mutation (used when user needs to input MFA code during login)
   const verifyMfaMutation = useMutation<User, Error, MfaVerifyData>({
     mutationFn: async (verifyData) => {
@@ -195,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
-  
+
   // MFA setup mutation (used to initiate MFA setup)
   const setupMfaMutation = useMutation<any, Error, MfaSetupData>({
     mutationFn: async (setupData) => {
@@ -219,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
-  
+
   // MFA enable mutation (used to complete MFA setup with verification)
   const enableMfaMutation = useMutation<User, Error, MfaEnableData>({
     mutationFn: async (enableData) => {
@@ -245,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
-  
+
   // MFA disable mutation
   const disableMfaMutation = useMutation<User, Error, MfaDisableData>({
     mutationFn: async (disableData) => {
